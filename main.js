@@ -778,6 +778,9 @@ rightHandGroup.rotation.y = -Math.PI / 60; // Mirrored Y rotation
 // Store initial hand positions for returning to default
 const initialLeftHandPosition = leftHandGroup.position.clone();
 const initialRightHandPosition = rightHandGroup.position.clone();
+// ADDED: Store initial hand rotations
+const initialLeftHandRotation = leftHandGroup.rotation.clone();
+const initialRightHandRotation = rightHandGroup.rotation.clone();
 
 scene.add(leftHandGroup);
 scene.add(rightHandGroup);
@@ -863,6 +866,13 @@ const CCD_ITERATIONS = 10;
 const CCD_THRESHOLD = 0.01; // How close the fingertip should get to the target
 const CCD_SMOOTHING_FACTOR = 0.1; // Adjust this value (0.1 to 1.0) to control smoothness. 1.0 is no smoothing.
 const TARGET_MOVEMENT_SPEED = 0.35; // Speed factor for IK target movement (0.0 to 1.0)
+
+// NEW: Idle Animation Parameters
+const IDLE_IK_TARGET_DESTINATION_MAGNITUDE = 0.008; // Renamed from IDLE_FINGER_MOVEMENT_MAGNITUDE, increased from 0.005. How much IK target destinations for idle fingers twitch
+const IDLE_IK_TARGET_DESTINATION_SPEED = 0.02; // Renamed from IDLE_FINGER_MOVEMENT_SPEED. How fast IK target destinations for idle fingers twitch
+const IDLE_PALM_MOVEMENT_MAGNITUDE_POS = 0.002; // How much palm moves
+const IDLE_PALM_MOVEMENT_MAGNITUDE_ROT = 0.001; // How much palm rotates
+const IDLE_PALM_MOVEMENT_SPEED = 0.01; // How fast palm moves/rotates
 
 // NEW: Crowding avoidance parameters
 const CROWDING_PENALTY_DISTANCE_SQ = 0.09; // (0.3 units)^2, e.g., if IK targets are closer than 0.3 units
@@ -1937,6 +1947,7 @@ function animate() {
 	// Moved declarations to the top of the function scope
 	let isLeftHandActive = false;
 	let isRightHandActive = false;
+	const time = Date.now() * 0.001; // Time for sinusoidal movements
 
 	if (orbitControls) {
 		orbitControls.update();
@@ -2034,40 +2045,142 @@ function animate() {
 	// --- Hand Return to Default Position Logic --- // CORRECT PLACEMENT
 	// Left Hand
 	if (!isLeftHandActive) {
-		const leftReturnVector = new THREE.Vector3().subVectors(
-			initialLeftHandPosition,
+		// Calculate idle offsets for position
+		const palmIdlePosX =
+			Math.sin(time * IDLE_PALM_MOVEMENT_SPEED * 0.7) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_POS;
+		const palmIdlePosY =
+			Math.cos(time * IDLE_PALM_MOVEMENT_SPEED * 1.3) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_POS;
+		const palmIdlePosZ =
+			Math.sin(time * IDLE_PALM_MOVEMENT_SPEED * 0.9) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_POS;
+
+		// Calculate idle offsets for rotation
+		const palmIdleRotX =
+			Math.cos(time * IDLE_PALM_MOVEMENT_SPEED * 1.1) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_ROT;
+		const palmIdleRotY =
+			Math.sin(time * IDLE_PALM_MOVEMENT_SPEED * 0.8) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_ROT;
+
+		// Calculate target position for this frame
+		const targetPosition = initialLeftHandPosition.clone();
+		targetPosition.x += palmIdlePosX;
+		targetPosition.y += palmIdlePosY;
+		targetPosition.z += palmIdlePosZ;
+
+		// Calculate target rotation for this frame (Euler angles)
+		const targetRotation = initialLeftHandRotation.clone(); // This is a THREE.Euler
+		targetRotation.x += palmIdleRotX;
+		targetRotation.y += palmIdleRotY;
+		// targetRotation.z will use the initial value if not idly changed
+
+		// Smoothly move position towards targetPosition
+		const positionDelta = new THREE.Vector3().subVectors(
+			targetPosition,
 			leftHandGroup.position
 		);
-		if (leftReturnVector.lengthSq() > 0.0001) {
-			const leftReturnMovement = leftReturnVector
-				.clone()
-				.multiplyScalar(HAND_RETURN_TO_DEFAULT_FACTOR);
-			if (leftReturnMovement.length() > MAX_HAND_ADJUSTMENT_PER_FRAME) {
-				leftReturnMovement
+		if (positionDelta.lengthSq() > 0.000001) {
+			const positionMovement = positionDelta.multiplyScalar(
+				HAND_RETURN_TO_DEFAULT_FACTOR
+			);
+			if (positionMovement.length() > MAX_HAND_ADJUSTMENT_PER_FRAME) {
+				positionMovement
 					.normalize()
 					.multiplyScalar(MAX_HAND_ADJUSTMENT_PER_FRAME);
 			}
-			leftHandGroup.position.add(leftReturnMovement);
+			leftHandGroup.position.add(positionMovement);
+		} else {
+			leftHandGroup.position.copy(targetPosition);
 		}
+
+		// Smoothly move rotation towards targetRotation (lerping Euler components)
+		leftHandGroup.rotation.x = THREE.MathUtils.lerp(
+			leftHandGroup.rotation.x,
+			targetRotation.x,
+			HAND_RETURN_TO_DEFAULT_FACTOR
+		);
+		leftHandGroup.rotation.y = THREE.MathUtils.lerp(
+			leftHandGroup.rotation.y,
+			targetRotation.y,
+			HAND_RETURN_TO_DEFAULT_FACTOR
+		);
+		leftHandGroup.rotation.z = THREE.MathUtils.lerp(
+			leftHandGroup.rotation.z,
+			initialLeftHandRotation.z,
+			HAND_RETURN_TO_DEFAULT_FACTOR
+		);
 	}
 
 	// Right Hand
 	if (!isRightHandActive) {
-		const rightReturnVector = new THREE.Vector3().subVectors(
-			initialRightHandPosition,
+		// Calculate idle offsets for position (using different seeds for variety)
+		const palmIdlePosX =
+			Math.cos(time * IDLE_PALM_MOVEMENT_SPEED * 0.75) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_POS;
+		const palmIdlePosY =
+			Math.sin(time * IDLE_PALM_MOVEMENT_SPEED * 1.25) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_POS;
+		const palmIdlePosZ =
+			Math.cos(time * IDLE_PALM_MOVEMENT_SPEED * 0.95) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_POS;
+
+		// Calculate idle offsets for rotation (using different seeds)
+		const palmIdleRotX =
+			Math.sin(time * IDLE_PALM_MOVEMENT_SPEED * 1.15) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_ROT;
+		const palmIdleRotY =
+			Math.cos(time * IDLE_PALM_MOVEMENT_SPEED * 0.85) *
+			IDLE_PALM_MOVEMENT_MAGNITUDE_ROT;
+
+		// Calculate target position for this frame
+		const targetPosition = initialRightHandPosition.clone();
+		targetPosition.x += palmIdlePosX;
+		targetPosition.y += palmIdlePosY;
+		targetPosition.z += palmIdlePosZ;
+
+		// Calculate target rotation for this frame (Euler angles)
+		const targetRotation = initialRightHandRotation.clone(); // This is a THREE.Euler
+		targetRotation.x += palmIdleRotX;
+		targetRotation.y += palmIdleRotY;
+		// targetRotation.z will use the initial value
+
+		// Smoothly move position towards targetPosition
+		const positionDelta = new THREE.Vector3().subVectors(
+			targetPosition,
 			rightHandGroup.position
 		);
-		if (rightReturnVector.lengthSq() > 0.0001) {
-			const rightReturnMovement = rightReturnVector
-				.clone()
-				.multiplyScalar(HAND_RETURN_TO_DEFAULT_FACTOR);
-			if (rightReturnMovement.length() > MAX_HAND_ADJUSTMENT_PER_FRAME) {
-				rightReturnMovement
+		if (positionDelta.lengthSq() > 0.000001) {
+			const positionMovement = positionDelta.multiplyScalar(
+				HAND_RETURN_TO_DEFAULT_FACTOR
+			);
+			if (positionMovement.length() > MAX_HAND_ADJUSTMENT_PER_FRAME) {
+				positionMovement
 					.normalize()
 					.multiplyScalar(MAX_HAND_ADJUSTMENT_PER_FRAME);
 			}
-			rightHandGroup.position.add(rightReturnMovement);
+			rightHandGroup.position.add(positionMovement);
+		} else {
+			rightHandGroup.position.copy(targetPosition);
 		}
+
+		// Smoothly move rotation towards targetRotation (lerping Euler components)
+		rightHandGroup.rotation.x = THREE.MathUtils.lerp(
+			rightHandGroup.rotation.x,
+			targetRotation.x,
+			HAND_RETURN_TO_DEFAULT_FACTOR
+		);
+		rightHandGroup.rotation.y = THREE.MathUtils.lerp(
+			rightHandGroup.rotation.y,
+			targetRotation.y,
+			HAND_RETURN_TO_DEFAULT_FACTOR
+		);
+		rightHandGroup.rotation.z = THREE.MathUtils.lerp(
+			rightHandGroup.rotation.z,
+			initialRightHandRotation.z,
+			HAND_RETURN_TO_DEFAULT_FACTOR
+		);
 	}
 
 	// Ensure world matrices are updated once after all position adjustments for the frame
@@ -2094,10 +2207,30 @@ function animate() {
 
 			if (isFingerReturningToRest[fingerId]) {
 				const curledDestination = worldRestPosition.clone();
-				const curlDirection = new THREE.Vector3(0, -1, 0);
+				const curlDirection = new THREE.Vector3(0, -1, 0); // Base curl direction (downwards in finger's local Y)
+				// Apply hand's quaternion to get world-space curl direction
 				curlDirection.applyQuaternion(handGroup.quaternion);
 				curlDirection.normalize().multiplyScalar(FINGER_REST_CURL_OFFSET);
 				curledDestination.add(curlDirection);
+
+				// NEW: Add subtle idle movement to resting fingers' IK target destinations
+				const idleOffsetX =
+					Math.sin(time * IDLE_IK_TARGET_DESTINATION_SPEED + fingerId.length) *
+					IDLE_IK_TARGET_DESTINATION_MAGNITUDE;
+				const idleOffsetY =
+					Math.cos(
+						time * IDLE_IK_TARGET_DESTINATION_SPEED * 1.2 +
+							fingerId.length * 0.5
+					) * IDLE_IK_TARGET_DESTINATION_MAGNITUDE;
+				const idleOffsetZ =
+					Math.sin(
+						time * IDLE_IK_TARGET_DESTINATION_SPEED * 0.8 +
+							fingerId.length * 0.2
+					) * IDLE_IK_TARGET_DESTINATION_MAGNITUDE;
+				curledDestination.x += idleOffsetX;
+				curledDestination.y += idleOffsetY;
+				curledDestination.z += idleOffsetZ;
+
 				ikTargetDestinations[fingerId].copy(curledDestination);
 			}
 		}
