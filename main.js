@@ -87,6 +87,7 @@ orbitControls.maxDistance = 50;
 // NEW: Text display for typed characters
 let typedTextString = "";
 const typedTextDisplay = document.createElement("div");
+let hiddenInput = null; // NEW: Hidden input for mobile keyboard
 
 function setupTypedTextDisplay() {
 	typedTextDisplay.id = "typed-text-display";
@@ -114,6 +115,74 @@ function setupTypedTextDisplay() {
 	typedTextDisplay.style.msUserSelect = "none"; // IE, Edge
 	typedTextDisplay.textContent = "Start typing..."; // Initial placeholder
 	document.body.appendChild(typedTextDisplay);
+
+	// NEW: Create and setup hidden input field
+	hiddenInput = document.createElement("input");
+	hiddenInput.type = "text";
+	hiddenInput.style.position = "absolute";
+	hiddenInput.style.opacity = "0";
+	hiddenInput.style.pointerEvents = "none";
+	hiddenInput.style.left = "-9999px"; // Move off-screen
+	hiddenInput.setAttribute("aria-hidden", "true"); // For accessibility
+	hiddenInput.setAttribute("tabindex", "-1"); // Not focusable by tabbing
+	document.body.appendChild(hiddenInput);
+
+	// NEW: When typedTextDisplay is clicked/touched, focus the hidden input
+	typedTextDisplay.addEventListener("click", () => {
+		if (hiddenInput) {
+			hiddenInput.focus();
+		}
+	});
+	typedTextDisplay.addEventListener("touchstart", () => {
+		// Also for touch devices
+		if (hiddenInput) {
+			hiddenInput.focus();
+		}
+	});
+
+	// NEW: Listen to input events on the hidden input field
+	if (hiddenInput) {
+		hiddenInput.addEventListener("input", (event) => {
+			if (typedTextString === "Start typing...") {
+				typedTextString = ""; // Clear placeholder on first input
+			}
+			typedTextString = event.target.value;
+			typedTextDisplay.textContent = typedTextString || " "; // Show a space if string is empty
+
+			// Optional: Simulate key events for existing animation logic
+			// This part might need careful implementation if animations are desired
+			// For now, focus on text display.
+			// If the last character is new, we can try to simulate a keydown for it.
+			// const lastChar = typedTextString.slice(-1);
+			// if (lastChar) {
+			//     // This is a simplification. Mapping char to event.code is complex.
+			//     // Consider a more robust way if animations are critical here.
+			//     const fakeKeyDownEvent = new KeyboardEvent('keydown', { key: lastChar, code: `Key${lastChar.toUpperCase()}` });
+			//     window.dispatchEvent(fakeKeyDownEvent);
+			// }
+		});
+
+		// Clear the hidden input if the user explicitly clears the text display (e.g., via backspace in physical kbd)
+		// This helps keep them in sync.
+		const observer = new MutationObserver(() => {
+			if (
+				hiddenInput.value !== typedTextDisplay.textContent &&
+				typedTextDisplay.textContent !== "Start typing..."
+			) {
+				if (typedTextDisplay.textContent === " ") {
+					// special case for empty display
+					hiddenInput.value = "";
+				} else {
+					hiddenInput.value = typedTextDisplay.textContent;
+				}
+			}
+		});
+		observer.observe(typedTextDisplay, {
+			childList: true,
+			characterData: true,
+			subtree: true,
+		});
+	}
 }
 setupTypedTextDisplay();
 
@@ -1211,27 +1280,36 @@ window.addEventListener("keydown", (event) => {
 	const pressedKeyId = event.code;
 
 	// --- Update Typed Text Display --- START
-	if (typedTextString === "Start typing...") {
-		typedTextString = ""; // Clear placeholder on first actual key press relevant to typing
-	}
+	// This section will now primarily be driven by the hiddenInput's "input" event for mobile.
+	// For physical keyboards, this existing logic can remain as a fallback or for desktop.
+	// We need to avoid double-processing if hiddenInput is active.
+	if (document.activeElement !== hiddenInput) {
+		if (typedTextString === "Start typing...") {
+			typedTextString = ""; // Clear placeholder on first actual key press relevant to typing
+		}
 
-	if (event.key.length === 1) {
-		// Most printable characters (letters, numbers, symbols)
-		typedTextString += event.key;
-	} else if (event.key === "Backspace") {
-		typedTextString = typedTextString.slice(0, -1);
-		event.preventDefault(); // Prevent browser back navigation
-	} else if (event.key === "Enter") {
-		typedTextString += "\n"; // Add newline character
-		event.preventDefault(); // Prevent form submission if any
-	} else if (event.key === " ") {
-		// Spacebar (event.code is "Space")
-		typedTextString += " ";
-		event.preventDefault();
-	}
-	// More specific key handling can be added here (e.g., Tab)
+		if (event.key.length === 1) {
+			// Most printable characters (letters, numbers, symbols)
+			typedTextString += event.key;
+		} else if (event.key === "Backspace") {
+			typedTextString = typedTextString.slice(0, -1);
+			event.preventDefault(); // Prevent browser back navigation
+		} else if (event.key === "Enter") {
+			typedTextString += "\n"; // Add newline character
+			event.preventDefault(); // Prevent form submission if any
+		} else if (event.key === " ") {
+			// Spacebar (event.code is "Space")
+			typedTextString += " ";
+			event.preventDefault();
+		}
+		// More specific key handling can be added here (e.g., Tab)
 
-	typedTextDisplay.textContent = typedTextString || " "; // Show a space if string is empty to maintain height
+		typedTextDisplay.textContent = typedTextString || " "; // Show a space if string is empty to maintain height
+		// Also update hiddenInput if it's not the source, to keep them synced.
+		if (hiddenInput && hiddenInput.value !== typedTextString) {
+			hiddenInput.value = typedTextString;
+		}
+	}
 	// --- Update Typed Text Display --- END
 
 	// Add debug message for key press
