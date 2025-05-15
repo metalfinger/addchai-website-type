@@ -143,23 +143,73 @@ function setupTypedTextDisplay() {
 	// NEW: Listen to input events on the hidden input field
 	if (hiddenInput) {
 		hiddenInput.addEventListener("input", (event) => {
+			const previousText = typedTextString;
 			if (typedTextString === "Start typing...") {
 				typedTextString = ""; // Clear placeholder on first input
 			}
 			typedTextString = event.target.value;
 			typedTextDisplay.textContent = typedTextString || " "; // Show a space if string is empty
 
-			// Optional: Simulate key events for existing animation logic
-			// This part might need careful implementation if animations are desired
-			// For now, focus on text display.
-			// If the last character is new, we can try to simulate a keydown for it.
-			// const lastChar = typedTextString.slice(-1);
-			// if (lastChar) {
-			//     // This is a simplification. Mapping char to event.code is complex.
-			//     // Consider a more robust way if animations are critical here.
-			//     const fakeKeyDownEvent = new KeyboardEvent('keydown', { key: lastChar, code: `Key${lastChar.toUpperCase()}` });
-			//     window.dispatchEvent(fakeKeyDownEvent);
-			// }
+			// NEW: Animate key press for mobile virtual keyboard input
+			if (document.activeElement === hiddenInput) {
+				let newChar = "";
+				if (typedTextString.length > previousText.length) {
+					newChar = typedTextString.slice(previousText.length); // Can be multiple chars from autocorrect/swipe
+				} else if (
+					typedTextString.length < previousText.length &&
+					event.inputType === "deleteContentBackward"
+				) {
+					newChar = "Backspace"; // Special handling for backspace
+				}
+
+				const lastChar =
+					newChar.length > 0
+						? newChar[newChar.length - 1]
+						: newChar === "Backspace"
+						? "Backspace"
+						: null;
+
+				if (lastChar) {
+					let keyIdToAnimate = null;
+					if (lastChar === "Backspace") {
+						keyIdToAnimate = "Backspace";
+					} else {
+						keyIdToAnimate = characterToKeyIdMap[lastChar];
+					}
+
+					if (keyIdToAnimate) {
+						// Simulate press
+						animateKeyPress(keyIdToAnimate, true);
+						if (
+							keyPressSound &&
+							keyPressSound.buffer &&
+							keyIdToAnimate !== "Backspace"
+						) {
+							keyPressSound.stop();
+							keyPressSound.play();
+						}
+
+						// Simulate release after a short delay
+						setTimeout(() => {
+							animateKeyPress(keyIdToAnimate, false);
+							if (
+								keyReleaseSound &&
+								keyReleaseSound.buffer &&
+								keyIdToAnimate !== "Backspace"
+							) {
+								keyReleaseSound.stop();
+								keyReleaseSound.play();
+							}
+						}, KEY_PRESS_DURATION); // Use existing constant
+
+						// Finger animation for virtual keyboard (basic: find nearest available finger to the key)
+						// This part needs to be careful not to conflict with physical keyboard logic.
+						// For now, we will NOT attempt to move fingers for virtual keyboard input
+						// as it's complex and might look unnatural without more sophisticated logic.
+						// The primary goal here is visual feedback on the 3D keys.
+					}
+				}
+			}
 		});
 
 		// Clear the hidden input if the user explicitly clears the text display (e.g., via backspace in physical kbd)
@@ -447,6 +497,50 @@ const qwertyKeyLayout = [
 	],
 	[{ label: "Space", id: "Space", size: 6.25 }],
 ];
+
+// NEW: Map for character to keyId
+const characterToKeyIdMap = {};
+
+function populateCharacterToKeyIdMap() {
+	qwertyKeyLayout.forEach((row) => {
+		row.forEach((keyInfo) => {
+			// Simple mapping: label to id.
+			// This won't handle shift states perfectly (e.g. '!' vs '1')
+			// but is a good starting point for direct character keys.
+			if (keyInfo.label && keyInfo.id) {
+				if (keyInfo.label.length === 1) {
+					// Prioritize single characters
+					characterToKeyIdMap[keyInfo.label] = keyInfo.id;
+					// Add lowercase mapping if label is uppercase
+					if (keyInfo.label.match(/^[A-Z]$/)) {
+						characterToKeyIdMap[keyInfo.label.toLowerCase()] = keyInfo.id;
+					}
+				}
+				// Special cases for common labels that aren't single chars
+				else if (keyInfo.label === "`") characterToKeyIdMap["`"] = keyInfo.id;
+				else if (keyInfo.label === "-") characterToKeyIdMap["-"] = keyInfo.id;
+				else if (keyInfo.label === "=") characterToKeyIdMap["="] = keyInfo.id;
+				else if (keyInfo.label === "[") characterToKeyIdMap["["] = keyInfo.id;
+				else if (keyInfo.label === "]") characterToKeyIdMap["]"] = keyInfo.id;
+				else if (keyInfo.label === "\\")
+					characterToKeyIdMap["\\"] = keyInfo.id; // Note: label is '\'
+				else if (keyInfo.label === ";") characterToKeyIdMap[";"] = keyInfo.id;
+				else if (keyInfo.label === "'") characterToKeyIdMap["'"] = keyInfo.id;
+				else if (keyInfo.label === ",") characterToKeyIdMap[","] = keyInfo.id;
+				else if (keyInfo.label === ".") characterToKeyIdMap["."] = keyInfo.id;
+				else if (keyInfo.label === "/") characterToKeyIdMap["/"] = keyInfo.id;
+				else if (keyInfo.label === "Space" && keyInfo.id === "Space")
+					characterToKeyIdMap[" "] = keyInfo.id; // Map space character
+			}
+		});
+	});
+	// Manual additions for numbers as their labels are '1' but events might give '1'
+	for (let i = 0; i <= 9; i++) {
+		characterToKeyIdMap[String(i)] = `Digit${i}`;
+	}
+	console.log("Character to KeyID Map:", characterToKeyIdMap);
+}
+populateCharacterToKeyIdMap(); // Call it once to build the map
 
 /**
  * Creates a texture for a key label.
@@ -1279,6 +1373,15 @@ window.addEventListener("keydown", (event) => {
 
 	const pressedKeyId = event.code;
 
+	// If hiddenInput is active, mobile keyboard is up, let its input handler manage text & animations
+	if (document.activeElement === hiddenInput) {
+		// Allow default behavior for certain keys like backspace if needed, but generally let the input event handle it.
+		// For example, to prevent browser back on backspace:
+		if (event.key === "Backspace") event.preventDefault();
+		if (event.key === "Enter") event.preventDefault();
+		return;
+	}
+
 	// --- Update Typed Text Display --- START
 	// This section will now primarily be driven by the hiddenInput's "input" event for mobile.
 	// For physical keyboards, this existing logic can remain as a fallback or for desktop.
@@ -1315,8 +1418,12 @@ window.addEventListener("keydown", (event) => {
 	// Add debug message for key press
 	console.log(`Key pressed: ${pressedKeyId}, event.key: ${event.key}`);
 
-	// Play key press sound
-	if (keyPressSound && keyPressSound.buffer) {
+	// Play key press sound only if not handled by hiddenInput's input event
+	if (
+		document.activeElement !== hiddenInput &&
+		keyPressSound &&
+		keyPressSound.buffer
+	) {
 		// Determine new random parameters
 		const newPlaybackRate = 0.9 + Math.random() * 0.2;
 		const newDetuneValue = (Math.random() - 0.5) * 100; // Range -50 to 50
@@ -1343,6 +1450,11 @@ window.addEventListener("keydown", (event) => {
 	if (!keyMesh) {
 		// console.warn(`Key ${pressedKeyId} not found on keyboard.`);
 		return; // Not a key we manage or it's missing
+	}
+
+	// If hiddenInput is active, don't do finger assignments or press animations here
+	if (document.activeElement === hiddenInput) {
+		return;
 	}
 
 	// If this key is already assigned to a finger, do nothing (or handle repeat if desired)
@@ -1429,11 +1541,20 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => {
 	const releasedKeyId = event.code;
 
+	// If hiddenInput is active, mobile keyboard is up, let its input handler manage animations (or ignore for keyup)
+	if (document.activeElement === hiddenInput) {
+		return;
+	}
+
 	// Add debug message for key release
 	console.log(`Key released: ${releasedKeyId}`);
 
-	// Play key release sound
-	if (keyReleaseSound && keyReleaseSound.buffer) {
+	// Play key release sound only if not handled by hiddenInput's input event
+	if (
+		document.activeElement !== hiddenInput &&
+		keyReleaseSound &&
+		keyReleaseSound.buffer
+	) {
 		// Determine new random parameters
 		const newPlaybackRate = 0.9 + Math.random() * 0.2;
 		const newDetuneValue = (Math.random() - 0.5) * 100; // Range -50 to 50
@@ -1456,6 +1577,12 @@ window.addEventListener("keyup", (event) => {
 	const fingerToReset = keyAssignments[releasedKeyId];
 
 	if (fingerToReset) {
+		// If hiddenInput is active, don't mess with finger assignments here.
+		// This check is a bit redundant due to the early return, but safe.
+		if (document.activeElement === hiddenInput) {
+			return;
+		}
+
 		console.log(
 			`Resetting finger: ${fingerToReset} from key: ${releasedKeyId}`
 		);
@@ -1483,6 +1610,11 @@ window.addEventListener("keyup", (event) => {
 
 // Add a special handler specifically for Caps Lock to handle OS-level quirks
 document.addEventListener("keydown", function (event) {
+	// If hiddenInput is active, mobile keyboard is up, let its input handler manage.
+	if (document.activeElement === hiddenInput && event.code === "CapsLock") {
+		event.preventDefault(); // Prevent default if any, but mostly rely on input handler.
+		return;
+	}
 	// Special handling for Caps Lock to ensure finger always returns to rest
 	if (event.code === "CapsLock") {
 		console.log("CapsLock keydown detected by special handler");
@@ -1510,6 +1642,10 @@ document.addEventListener("keydown", function (event) {
 
 // Add an explicit keyup listener specifically for Caps Lock
 document.addEventListener("keyup", function (event) {
+	// If hiddenInput is active, mobile keyboard is up, let its input handler manage.
+	if (document.activeElement === hiddenInput && event.code === "CapsLock") {
+		return;
+	}
 	if (event.code === "CapsLock") {
 		console.log(
 			"CapsLock keyup detected by special handler - immediate release"
