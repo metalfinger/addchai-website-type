@@ -20,7 +20,7 @@ const camera = new THREE.PerspectiveCamera(
 
 const INITIAL_CAMERA_Y = 0;
 const TARGET_VISIBLE_WIDTH = 7.0; // Ensure this width is always visible (e.g., keyboard + margin)
-const MIN_CAMERA_Z = 3.5; // Minimum distance camera can be
+const MIN_CAMERA_Z = 2.5; // Minimum distance camera can be
 const MAX_CAMERA_Z = 12.0; // Maximum distance camera can be (increased slightly)
 
 function adjustCameraDistance() {
@@ -49,11 +49,11 @@ adjustCameraDistance(); // Call once initially to set the correct Z based on ini
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xf0f0f0); // Light gray background instead of pure white
+renderer.setClearColor(0x111111); // Dark background for neon aesthetic
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.2; // Increased exposure for better contrast
+renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // HDR Environment Loading
@@ -240,10 +240,10 @@ setupTypedTextDisplay();
 // const ambientLight = new THREE.AmbientLight(0x222222, 0.5); // Dimmer ambient light - REMOVED
 // scene.add(ambientLight); // REMOVED
 
-const hemisphereLight = new THREE.HemisphereLight(0xffffbb, 0x080820, 0.8); // Sky, Ground, Intensity
+const hemisphereLight = new THREE.HemisphereLight(0x888877, 0x777788, 1.0); // Sky, Ground, Intensity
 scene.add(hemisphereLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0); // Increased intensity
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Increased intensity
 directionalLight.position.set(10, 20, 5); // Adjusted position slightly
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 2048; // Increased shadow map size for quality
@@ -251,22 +251,20 @@ directionalLight.shadow.mapSize.height = 2048;
 directionalLight.shadow.camera.near = 0.5;
 directionalLight.shadow.camera.far = 50;
 directionalLight.shadow.bias = -0.0005; // Adjusted bias slightly for better shadow rendering
-directionalLight.shadow.normalBias = 0.02; // Added normal bias to prevent shadow acne
 scene.add(directionalLight);
 
-// Add point lights for accent lighting
-const pointLight1 = new THREE.PointLight(0x3377ff, 0.8, 30); // Blue, adjusted intensity
+// Add point lights for neon effect
+const pointLight1 = new THREE.PointLight(0xff00ff, 0.7, 30); // Purple, adjusted intensity and distance
 pointLight1.position.set(3, 2, 3);
 scene.add(pointLight1);
 
-const pointLight2 = new THREE.PointLight(0x3377ff, 0.8, 30); // Blue, adjusted intensity
+const pointLight2 = new THREE.PointLight(0x00ffff, 0.7, 30); // Cyan, adjusted intensity and distance
 pointLight2.position.set(-3, 2, 3);
 scene.add(pointLight2);
 
 // Hand Model Parameters
-const BONE_BASE_RADIUS = 0.16; // Starting radius for the base of metacarpal bones
-const BONE_TAPER_FACTOR = 0.85; // How much each segment tapers (85% of previous radius)
-const JOINT_RADIUS_FACTOR = 1.0; // Joint radius will match the end radius of the bone
+const BONE_RADIUS = 0.12; // Increased from 0.08 to match JOINT_RADIUS
+const JOINT_RADIUS = 0.12;
 const FINGERTIP_RADIUS = 0.09;
 const PHALANX_LENGTH = 0.5;
 const METACARPAL_LENGTH = 0.8;
@@ -360,13 +358,16 @@ const fingerProperties = {
 
 // Create the gradient map for toon shading hands
 const handToonGradientMap = createToonGradientMap([
-	"rgb(20, 40, 90)", // Darkest shade
-	"rgb(40, 70, 140)", // Mid-dark shade
-	"rgb(70, 100, 170)", // Mid-light shade
-	"rgb(120, 150, 200)", // Lightest shade
+	"rgb(30, 60, 120)", // Darkest shade
+	"rgb(60, 90, 170)", // Mid-dark shade
+	"rgb(100, 130, 200)", // Mid-light shade
+	"rgb(150, 180, 230)", // Lightest shade
 ]);
 
-const handBaseColor = 0x6699cc; // More saturated blue for better visibility
+// const shadowColor = 0x303030; // Dark gray for shadow - No longer needed for hands
+// const shadowOpacity = 0.65; // No longer needed
+
+const handBaseColor = 0xaaddff; // Unified light blue base color for the hand
 
 const boneMaterial = new THREE.MeshToonMaterial({
 	color: handBaseColor,
@@ -393,18 +394,18 @@ const ikTargetMaterial = new THREE.MeshStandardMaterial({
 
 // Neon key materials
 const keyMaterial = new THREE.MeshStandardMaterial({
-	color: 0x111111, // Darker black plastic for better contrast
-	roughness: 0.7, // Adjust for plastic appearance
+	color: 0xe0e0e0, // Whitish plastic
+	roughness: 0.65, // Adjust for plastic appearance
 	metalness: 0.05, // Very low for plastic
 	side: THREE.DoubleSide,
-	emissive: 0x000000, // No emissive by default
+	emissive: 0x111111, // Very subtle emissive, almost off
 	emissiveIntensity: 0.05,
 });
 const keyTopMaterial = new THREE.MeshStandardMaterial({
-	color: 0x222222, // Slightly lighter black for top
-	roughness: 0.6, // Slightly smoother top
+	color: 0xf0f0f0, // Lighter whitish plastic for top
+	roughness: 0.55, // Adjust for plastic appearance
 	metalness: 0.05, // Very low for plastic
-	emissive: 0x000000, // No emissive by default
+	emissive: 0x111111, // Very subtle emissive
 	emissiveIntensity: 0.05,
 });
 
@@ -421,14 +422,14 @@ const KEYBOARD_GLOBAL_Y_SHIFT = 1.3; // Adjusted from -0.3 to move keyboard up
 const KEY_TEXTURE_BASE_WIDTH_PX = 256; // Increased from 128 for sharper text
 const KEY_TEXTURE_BASE_DEPTH_PX = 256; // Increased from 128 for sharper text
 const KEY_FONT_SIZE = 60; // Increased from 48 for sharper text
-const KEY_TEXT_COLOR = "#ffffff"; // White text
-const KEY_LABEL_BACKGROUND_COLOR = "#222222"; // Dark background for keys
+const KEY_TEXT_COLOR = "#000000"; // Black text
+const KEY_LABEL_BACKGROUND_COLOR = "#e0e0e0"; // Match whitish plastic
 
 // Key press animation parameters (moved to global scope)
 const KEY_PRESS_DISTANCE = 0.05; // How far the key moves down when pressed
 const KEY_PRESS_DURATION = 150; // How long the key stays pressed (ms)
-const KEY_PRESSED_COLOR = 0x3377ff; // Blue color for pressed keys
-const KEY_PRESSED_EMISSIVE = 0x3377ff; // Blue glow for pressed keys
+const KEY_PRESSED_COLOR = 0x00ffff; // Cyan color for pressed keys
+const KEY_PRESSED_EMISSIVE = 0x00ffff; // Cyan glow for pressed keys
 const KEY_PRESSED_EMISSIVE_INTENSITY = 0.8; // Increased glow intensity when pressed
 const activeKeys = {}; // Track currently pressed keys
 
@@ -1917,7 +1918,7 @@ if (renderer && scene && camera) {
 		window.innerWidth,
 		window.innerHeight
 	);
-	ssaoPass.kernelRadius = 12; // Reduced from 16 for less fogginess
+	ssaoPass.kernelRadius = 16; // Default is 16, adjust for effect strength/spread
 	ssaoPass.minDistance = 0.005; // Default 0.005, adjust based on scene scale
 	ssaoPass.maxDistance = 0.1; // Default 0.1, adjust based on scene scale
 	// ssaoPass.output = SSAOPass.OUTPUT.SSAO; // For debugging AO only
@@ -1925,9 +1926,9 @@ if (renderer && scene && camera) {
 
 	bloomPass = new UnrealBloomPass(
 		new THREE.Vector2(window.innerWidth, window.innerHeight),
-		0.4, // strength reduced from 0.7
-		0.3, // radius reduced from 0.4
-		0.9 // threshold increased from 0.85 (only brightest parts will glow)
+		0.7, // strength
+		0.4, // radius
+		0.85 // threshold
 	);
 	composer.addPass(bloomPass);
 
@@ -2459,42 +2460,31 @@ function createKeyboard() {
 
 // Hand Model Creation (createBone, createJoint, createFinger - these are defined below now)
 /**
- * Creates a bone segment mesh (cylinder) with tapered ends.
+ * Creates a bone segment mesh (cylinder).
  * @param {number} length - The length of the bone.
- * @param {number} startRadius - The radius at the start of the bone.
- * @param {number} endRadius - The radius at the end of the bone.
+ * @param {number} radius - The radius of the bone.
  * @param {string} name - The name for this bone mesh.
  * @returns {THREE.Mesh}
  */
-function createBone(length, startRadius, endRadius, name) {
-	const geometry = new THREE.CylinderGeometry(
-		endRadius,
-		startRadius,
-		length,
-		16
-	);
+function createBone(length, radius, name) {
+	const geometry = new THREE.CylinderGeometry(radius, radius, length, 16);
 	const bone = new THREE.Mesh(geometry, boneMaterial);
 	bone.geometry.translate(0, length / 2, 0); // Pivot at the base
 	bone.name = name;
-	bone.castShadow = true;
-	bone.receiveShadow = true;
 	return bone;
 }
 
 /**
  * Creates a joint (a THREE.Group for pivoting) with a visual sphere.
  * @param {string} name - The name for this joint group.
- * @param {number} radius - The radius of the joint sphere.
  * @returns {THREE.Group}
  */
-function createJoint(name, radius) {
+function createJoint(name) {
 	const jointGroup = new THREE.Group();
 	jointGroup.name = name;
-	const jointSphereGeometry = new THREE.SphereGeometry(radius, 16, 12);
+	const jointSphereGeometry = new THREE.SphereGeometry(JOINT_RADIUS, 16, 12);
 	const jointSphere = new THREE.Mesh(jointSphereGeometry, jointMaterial);
 	jointSphere.name = name + "_visual";
-	jointSphere.castShadow = true;
-	jointSphere.receiveShadow = true;
 	jointGroup.add(jointSphere);
 	return jointGroup;
 }
@@ -2511,91 +2501,52 @@ function createFinger(fingerId) {
 		return new THREE.Group(); // Return empty group on error
 	}
 
-	// Start with the base radius, scaled by finger type
-	let currentRadius = BONE_BASE_RADIUS;
-	// Adjust starting radius based on finger type
-	const isThumb = fingerId === "thumb" || fingerId === "thumb_right";
-	const isPinky = fingerId === "pinky" || fingerId === "pinky_right";
-
-	if (isThumb) currentRadius *= 1.05; // Thumb is slightly thicker
-	else if (isPinky) currentRadius *= 0.8; // Pinky is thinner
-	else if (fingerId.includes("ring"))
-		currentRadius *= 0.85; // Ring finger is thinner
-	else if (fingerId.includes("middle")) currentRadius *= 0.95; // Middle finger maintains thickness
-
-	// Create the base joint connecting to palm
-	const fingerBaseJoint = createJoint(
-		"finger_base_" + fingerId,
-		currentRadius * JOINT_RADIUS_FACTOR
-	);
+	const fingerBaseJoint = createJoint("finger_base_" + fingerId); // This is the joint connecting to the palm
 	let currentJoint = fingerBaseJoint;
 
-	// Calculate the actual metacarpal length using the property factor
 	const actualMetacarpalLength =
 		METACARPAL_LENGTH * (props.metacarpalLengthFactor || 1);
-
-	// Calculate end radius of metacarpal with tapering
-	const metacarpalEndRadius = currentRadius * BONE_TAPER_FACTOR;
-
-	// Create the metacarpal bone with tapering from currentRadius to metacarpalEndRadius
 	const metacarpalBoneName = "metacarpal_bone_" + fingerId;
 	const metacarpalBone = createBone(
 		actualMetacarpalLength,
-		currentRadius,
-		metacarpalEndRadius,
+		BONE_RADIUS * 1.2, // Standard metacarpal thickness for now
 		metacarpalBoneName
 	);
 	currentJoint.add(metacarpalBone);
 
-	// Update current radius for next segment
-	currentRadius = metacarpalEndRadius;
-
-	// Calculate the actual phalanx length using the property factor
 	const actualPhalanxLength = PHALANX_LENGTH * (props.phalanxLengthFactor || 1);
 
-	// Create each phalanx segment
 	for (let i = 0; i < props.numSegments; i++) {
-		// Create joint at the end of previous bone with current radius
 		const phalanxJointName = "phalanx_joint_" + i + "_" + fingerId;
-		const nextJoint = createJoint(
-			phalanxJointName,
-			currentRadius * JOINT_RADIUS_FACTOR
-		);
+		const nextJoint = createJoint(phalanxJointName);
 		nextJoint.position.y =
 			i === 0 ? actualMetacarpalLength : actualPhalanxLength;
 		currentJoint.add(nextJoint);
 
-		// Calculate end radius with tapering for this phalanx
-		const phalanxEndRadius = currentRadius * BONE_TAPER_FACTOR;
-
-		// Create the phalanx bone with tapering
 		const phalanxBoneName = "phalanx_bone_" + i + "_" + fingerId;
+		// Check if this is a thumb (either left or right)
+		const isThumb = fingerId === "thumb" || fingerId === "thumb_right";
+		// Specific thinning for thumb's distal phalanx (if it has more than one segment and this is not the first one)
+		const boneRadiusScale = isThumb && i > 0 && props.numSegments > 1 ? 0.9 : 1;
 		const phalanxBone = createBone(
 			actualPhalanxLength,
-			currentRadius,
-			phalanxEndRadius,
+			BONE_RADIUS * boneRadiusScale,
 			phalanxBoneName
 		);
 		nextJoint.add(phalanxBone);
 
-		// Update current radius for next segment
-		currentRadius = phalanxEndRadius;
 		currentJoint = nextJoint;
 
-		// Add fingertip at the end of the last phalanx
 		if (i === props.numSegments - 1) {
 			const fingertipVisualName = "fingertip_visual_" + fingerId;
-			// Use either the final tapered radius or FINGERTIP_RADIUS, whichever is smaller
-			const tipRadius = Math.min(
-				currentRadius * BONE_TAPER_FACTOR,
-				FINGERTIP_RADIUS
+			const fingertipGeometry = new THREE.SphereGeometry(
+				FINGERTIP_RADIUS,
+				16,
+				12
 			);
-			const fingertipGeometry = new THREE.SphereGeometry(tipRadius, 16, 12);
 			const fingertip = new THREE.Mesh(fingertipGeometry, fingertipMaterial);
 			fingertip.name = fingertipVisualName;
 			fingertip.position.y = actualPhalanxLength;
-			fingertip.castShadow = true;
-			fingertip.receiveShadow = true;
 			currentJoint.add(fingertip);
 		}
 	}
@@ -2603,20 +2554,3 @@ function createFinger(fingerId) {
 }
 
 // --- End Key Press Animation Logic ---
-
-// Add floor/ground for context and shadows
-function addGround() {
-	const groundGeometry = new THREE.PlaneGeometry(30, 30);
-	const groundMaterial = new THREE.MeshStandardMaterial({
-		color: 0xdddddd,
-		roughness: 0.8,
-		metalness: 0.1,
-		side: THREE.DoubleSide,
-	});
-	const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-	ground.rotation.x = Math.PI / 2;
-	ground.position.y = -1.5; // Position below the hands and keyboard
-	ground.receiveShadow = true;
-	scene.add(ground);
-}
-addGround();
