@@ -1,0 +1,20 @@
+@keyframes blink {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0;
+	}
+}
+
+.blinking-cursor {
+	font-weight: bold;
+	animation: blink 1s step-end infinite;
+	color: #000; /* Or any color that contrasts with your text background */
+	margin-left: 2px; /* Small space between text and cursor */
+}
+
+#text-container {
+	display: inline; /* Ensures cursor stays on the same line */
+}

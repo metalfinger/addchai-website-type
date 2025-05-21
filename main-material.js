@@ -18,7 +18,7 @@ const camera = new THREE.PerspectiveCamera(
 	1000
 );
 
-const INITIAL_CAMERA_Y = -1.5; // Moved camera down
+const INITIAL_CAMERA_Y = 0;
 const TARGET_VISIBLE_WIDTH = 7.0; // Ensure this width is always visible (e.g., keyboard + margin)
 const MIN_CAMERA_Z = 3.5; // Minimum distance camera can be
 const MAX_CAMERA_Z = 12.0; // Maximum distance camera can be (increased slightly)
@@ -49,7 +49,7 @@ adjustCameraDistance(); // Call once initially to set the correct Z based on ini
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xffffff); // Pure white background
+renderer.setClearColor(0xf0f0f0); // Light gray background instead of pure white
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -80,13 +80,9 @@ orbitControls = new OrbitControls(camera, renderer.domElement);
 orbitControls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
 orbitControls.dampingFactor = 0.05;
 orbitControls.screenSpacePanning = false; // usually true for 2D type controls
-orbitControls.enableZoom = false; // Disable zooming via scroll
 orbitControls.minDistance = 1;
 orbitControls.maxDistance = 50;
 // orbitControls.maxPolarAngle = Math.PI / 2; // Optional: prevent camera from going below ground
-
-// Set the point the camera orbits around
-orbitControls.target.set(0, 2, 0);
 
 // NEW: Text display for typed characters
 let typedTextString = "";
@@ -118,7 +114,7 @@ function setupTypedTextDisplay() {
 	typedTextDisplay.style.mozUserSelect = "none"; // Firefox
 	typedTextDisplay.style.msUserSelect = "none"; // IE, Edge
 	typedTextDisplay.textContent = "Start typing..."; // Initial placeholder
-	// document.body.appendChild(typedTextDisplay); // REMOVE THIS LINE
+	document.body.appendChild(typedTextDisplay);
 
 	// NEW: Create and setup hidden input field
 	hiddenInput = document.createElement("input");
@@ -132,19 +128,21 @@ function setupTypedTextDisplay() {
 	document.body.appendChild(hiddenInput);
 
 	// NEW: When typedTextDisplay is clicked/touched, focus the hidden input
-	/* // REMOVE THESE LISTENERS
 	typedTextDisplay.addEventListener("click", () => {
 		if (hiddenInput) {
 			hiddenInput.focus();
 		}
 	});
-	typedTextDisplay.addEventListener("touchstart", () => {
-		// Also for touch devices
-		if (hiddenInput) {
-			hiddenInput.focus();
-		}
-	});
-	*/ // END REMOVE THESE LISTENERS
+	typedTextDisplay.addEventListener(
+		"touchstart",
+		() => {
+			// Also for touch devices
+			if (hiddenInput) {
+				hiddenInput.focus();
+			}
+		},
+		{ passive: true }
+	); // Make event listener passive for better performance
 
 	// NEW: Listen to input events on the hidden input field
 	if (hiddenInput) {
@@ -270,15 +268,20 @@ pointLight2.position.set(-3, 2, 3);
 scene.add(pointLight2);
 
 // Hand Model Parameters
-const BONE_BASE_RADIUS = 0.16; // Starting radius for the base of metacarpal bones
+const BONE_BASE_RADIUS = 0.12; // Starting radius for the base of metacarpal bones
 const BONE_TAPER_FACTOR = 0.85; // How much each segment tapers (85% of previous radius)
-const JOINT_RADIUS_FACTOR = 1.0; // Joint radius will match the end radius of the bone
-const FINGERTIP_RADIUS = 0.09;
+const JOINT_RADIUS_FACTOR = 0.8; // Joint radius will be 80% of the end radius of the bone
+const FINGERTIP_RADIUS = 0.06;
 const PHALANX_LENGTH = 0.5;
-const METACARPAL_LENGTH = 0.8;
+const METACARPAL_LENGTH = 0.95; // Increased to form more of the hand body
 const PALM_WIDTH = 1.5;
-const PALM_HEIGHT = 0.2;
-const PALM_DEPTH = 1.2;
+const PALM_HEIGHT = 0.15; // Slightly reduced palm thickness
+const PALM_DEPTH = PALM_HEIGHT; // Palm depth will match height for a cylindrical cross-section
+
+// NEW: Palm Border Parameters
+const PALM_BORDER_JOINT_RADIUS = 0.08; // Radius for the corner joints of the palm border
+const PALM_BORDER_BONE_RADIUS = 0.06; // Radius for the segments of the palm border
+const PALM_BORDER_RECT_DEPTH = 0.7; // Depth of the palm border rectangle (Y-dimension in hand's local space)
 
 // NEW: Global variables for palm-relative IK target resting offsets and state
 const palmRelativeRestOffsets = {};
@@ -363,39 +366,293 @@ const fingerProperties = {
 };
 
 // Modern hand materials
+// Colorful eye-candy materials for hands
 
-// Create the gradient map for toon shading hands
-const handToonGradientMap = createToonGradientMap([
-	"rgb(20, 40, 90)", // Darkest shade
-	"rgb(40, 70, 140)", // Mid-dark shade
-	"rgb(70, 100, 170)", // Mid-light shade
-	"rgb(120, 150, 200)", // Lightest shade
-]);
-
-const handBaseColor = 0x6699cc; // More saturated blue for better visibility
-
-const boneMaterial = new THREE.MeshToonMaterial({
-	color: handBaseColor,
-	gradientMap: handToonGradientMap,
-	transparent: false,
-});
-const jointMaterial = new THREE.MeshToonMaterial({
-	color: handBaseColor,
-	gradientMap: handToonGradientMap,
-	transparent: false,
-});
-const fingertipMaterial = new THREE.MeshToonMaterial({
-	color: handBaseColor,
-	gradientMap: handToonGradientMap,
-	transparent: false,
-});
+// Define ikTargetMaterial first to avoid the initialization error
 const ikTargetMaterial = new THREE.MeshStandardMaterial({
 	color: 0x00ff88,
 	roughness: 0.3,
-	metalness: 0.7,
-	emissive: 0x005522,
-	emissiveIntensity: 0.5,
+	metalness: 0.8,
+	emissive: 0x00ff44,
+	emissiveIntensity: 0.7,
 }); // Green for IK target
+
+// Create a vibrant color palette for the fingers
+const fingerColors = [
+	{ color: 0xff2288, emissive: 0xff0066 }, // Pink
+	{ color: 0x00ffff, emissive: 0x00ccff }, // Cyan
+	{ color: 0xffaa00, emissive: 0xff8800 }, // Orange
+	{ color: 0x88ff00, emissive: 0x66cc00 }, // Lime
+	{ color: 0xff00ff, emissive: 0xcc00ff }, // Magenta
+];
+
+// Create divine, translucent glass materials for the hands
+const thumbMaterial = new THREE.MeshPhysicalMaterial({
+	color: fingerColors[0].color,
+	roughness: 0.1, // More polished surface
+	metalness: 0.2, // Less metallic, more like glass
+	emissive: fingerColors[0].emissive,
+	emissiveIntensity: 0.3, // Subtle internal glow
+	clearcoat: 1.0, // Full clearcoat for shine
+	clearcoatRoughness: 0.1, // Polished clearcoat
+	transparent: true, // Enable transparency
+	opacity: 0.7, // Translucent, not fully transparent
+	transmission: 0.4, // Light passes through material
+	ior: 1.5, // Index of refraction (glass-like)
+	thickness: 0.5, // Material thickness for refraction
+});
+
+const indexMaterial = new THREE.MeshPhysicalMaterial({
+	color: fingerColors[1].color,
+	roughness: 0.1,
+	metalness: 0.2,
+	emissive: fingerColors[1].emissive,
+	emissiveIntensity: 0.3,
+	clearcoat: 1.0,
+	clearcoatRoughness: 0.1,
+	transparent: true,
+	opacity: 0.7,
+	transmission: 0.4,
+	ior: 1.5,
+	thickness: 0.5,
+});
+
+const middleMaterial = new THREE.MeshPhysicalMaterial({
+	color: fingerColors[2].color,
+	roughness: 0.1,
+	metalness: 0.2,
+	emissive: fingerColors[2].emissive,
+	emissiveIntensity: 0.3,
+	clearcoat: 1.0,
+	clearcoatRoughness: 0.1,
+	transparent: true,
+	opacity: 0.7,
+	transmission: 0.4,
+	ior: 1.5,
+	thickness: 0.5,
+});
+
+const ringMaterial = new THREE.MeshPhysicalMaterial({
+	color: fingerColors[3].color,
+	roughness: 0.1,
+	metalness: 0.2,
+	emissive: fingerColors[3].emissive,
+	emissiveIntensity: 0.3,
+	clearcoat: 1.0,
+	clearcoatRoughness: 0.1,
+	transparent: true,
+	opacity: 0.7,
+	transmission: 0.4,
+	ior: 1.5,
+	thickness: 0.5,
+});
+
+const pinkyMaterial = new THREE.MeshPhysicalMaterial({
+	color: fingerColors[4].color,
+	roughness: 0.1,
+	metalness: 0.2,
+	emissive: fingerColors[4].emissive,
+	emissiveIntensity: 0.3,
+	clearcoat: 1.0,
+	clearcoatRoughness: 0.1,
+	transparent: true,
+	opacity: 0.7,
+	transmission: 0.4,
+	ior: 1.5,
+	thickness: 0.5,
+});
+
+// Map finger materials for both hands
+const fingerMaterialMap = {
+	thumb: thumbMaterial,
+	index: indexMaterial,
+	middle: middleMaterial,
+	ring: ringMaterial,
+	pinky: pinkyMaterial,
+	thumb_right: thumbMaterial.clone(),
+	index_right: indexMaterial.clone(),
+	middle_right: middleMaterial.clone(),
+	ring_right: ringMaterial.clone(),
+	pinky_right: pinkyMaterial.clone(),
+};
+
+// Default materials (fallback)
+const boneMaterial = middleMaterial.clone();
+const jointMaterial = middleMaterial.clone();
+const fingertipMaterial = middleMaterial.clone();
+
+// Add color cycling animation for the hands
+function updateHandColors(time) {
+	for (const fingerId in fingerMaterialMap) {
+		const material = fingerMaterialMap[fingerId];
+		if (material) {
+			// Create a color-cycling effect with slightly different phases for each finger
+			const fingerIndex = fingerId.includes("_right")
+				? Object.keys(fingerMaterialMap).indexOf(fingerId) - 5
+				: Object.keys(fingerMaterialMap).indexOf(fingerId);
+
+			const phase = fingerIndex * 0.2;
+			const hue = (time * 0.15 + phase) % 1.0;
+
+			// Create colors from HSL
+			const mainColor = new THREE.Color().setHSL(hue, 0.8, 0.6); // Reduced saturation
+			const emissiveColor = new THREE.Color().setHSL(hue, 0.8, 0.3);
+
+			material.color.copy(mainColor);
+			material.emissive.copy(emissiveColor);
+			// Keep emissiveIntensity at the lower value set above
+
+			// Subtle opacity pulsing for divine effect
+			if (material.transparent) {
+				// Make opacity pulse between 0.6 and 0.8
+				material.opacity = 0.6 + Math.sin(time * 2 + phase) * 0.1;
+
+				// Subtle transmission variation for light passing through
+				material.transmission = 0.3 + Math.sin(time * 3 + phase) * 0.1;
+			}
+		}
+	}
+}
+
+// Move these bloom settings to a function that's called after initialization
+function setupVibrantScene() {
+	// Change renderer settings for more vibrant look
+	renderer.setClearColor(0x111122); // Deep blue-purple background
+	renderer.toneMappingExposure = 1.3; // Increased exposure
+
+	// Enhanced lighting
+	hemisphereLight.intensity = 0.6;
+	directionalLight.intensity = 1.2;
+
+	// Adjust the point lights for more color
+	pointLight1.color.set(0xff00ff); // Magenta
+	pointLight1.intensity = 0.5; // Reduced from 1.0
+	pointLight1.position.set(3, 3, 5);
+
+	pointLight2.color.set(0x00ffff); // Cyan
+	pointLight2.intensity = 0.5; // Reduced from 1.0
+	pointLight2.position.set(-3, 3, 5);
+
+	// Add a third point light
+	const pointLight3 = new THREE.PointLight(0xffaa00, 1.0, 30); // Orange
+	pointLight3.position.set(0, 3, -5);
+	scene.add(pointLight3);
+}
+
+// Call this function immediately, and we'll handle bloomPass settings later
+setupVibrantScene();
+
+// NEW: Centralized Post-Processing Setup (moved and refined)
+let composer = null;
+let bloomPass = null;
+
+if (renderer && scene && camera) {
+	composer = new EffectComposer(renderer);
+	composer.addPass(new RenderPass(scene, camera));
+
+	const ssaoPass = new SSAOPass(
+		scene,
+		camera,
+		window.innerWidth,
+		window.innerHeight
+	);
+	ssaoPass.kernelRadius = 12; // Reduced from 16 for less fogginess
+	ssaoPass.minDistance = 0.005; // Default 0.005, adjust based on scene scale
+	ssaoPass.maxDistance = 0.1; // Default 0.1, adjust based on scene scale
+	// ssaoPass.output = SSAOPass.OUTPUT.SSAO; // For debugging AO only
+	composer.addPass(ssaoPass);
+
+	bloomPass = new UnrealBloomPass(
+		new THREE.Vector2(window.innerWidth, window.innerHeight),
+		0.4, // strength reduced from 0.7
+		0.3, // radius reduced from 0.4
+		0.9 // threshold increased from 0.85 (only brightest parts will glow)
+	);
+	composer.addPass(bloomPass);
+
+	// Update bloom settings for more eye candy (moved here after initialization)
+	bloomPass.strength = 0.3; // Reduced from 0.8
+	bloomPass.radius = 0.3; // Reduced from 0.5
+	bloomPass.threshold = 0.5; // Increased from 0.2 - fewer objects will glow
+
+	const outputPass = new OutputPass();
+	composer.addPass(outputPass);
+	console.log("EffectComposer initialized successfully with SSAO and Bloom.");
+} else {
+	console.error(
+		"Renderer, scene, or camera not ready for EffectComposer. Post-processing disabled."
+	);
+}
+
+// Enhanced ground material
+function updateGround() {
+	// Find the existing ground
+	const ground = scene.children.find(
+		(child) =>
+			child instanceof THREE.Mesh &&
+			child.geometry instanceof THREE.PlaneGeometry &&
+			child.position.y < 0
+	);
+
+	if (ground) {
+		// Create a more interesting ground material
+		const groundMaterial = new THREE.MeshStandardMaterial({
+			color: 0x222233,
+			roughness: 0.7,
+			metalness: 0.3,
+			emissive: 0x110022,
+			emissiveIntensity: 0.2,
+		});
+		ground.material = groundMaterial;
+
+		// Add a subtle grid pattern
+		const textureSize = 2048;
+		const gridCanvas = document.createElement("canvas");
+		gridCanvas.width = textureSize;
+		gridCanvas.height = textureSize;
+		const ctx = gridCanvas.getContext("2d");
+
+		// Fill with dark background
+		ctx.fillStyle = "#222233";
+		ctx.fillRect(0, 0, textureSize, textureSize);
+
+		// Draw grid lines
+		ctx.strokeStyle = "#4444aa";
+		ctx.lineWidth = 2;
+		const gridSize = 64;
+		const step = textureSize / gridSize;
+
+		ctx.beginPath();
+		for (let i = 0; i <= gridSize; i++) {
+			// Vertical lines
+			ctx.moveTo(i * step, 0);
+			ctx.lineTo(i * step, textureSize);
+			// Horizontal lines
+			ctx.moveTo(0, i * step);
+			ctx.lineTo(textureSize, i * step);
+		}
+		ctx.stroke();
+
+		// Create glowing intersection points
+		ctx.fillStyle = "#6666cc";
+		for (let i = 0; i <= gridSize; i++) {
+			for (let j = 0; j <= gridSize; j++) {
+				ctx.beginPath();
+				ctx.arc(i * step, j * step, 3, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		}
+
+		const gridTexture = new THREE.CanvasTexture(gridCanvas);
+		gridTexture.wrapS = THREE.RepeatWrapping;
+		gridTexture.wrapT = THREE.RepeatWrapping;
+		gridTexture.repeat.set(4, 4);
+
+		groundMaterial.map = gridTexture;
+		ground.receiveShadow = true;
+	}
+}
+updateGround();
 
 // Neon key materials
 const keyMaterial = new THREE.MeshStandardMaterial({
@@ -427,15 +684,15 @@ const KEYBOARD_GLOBAL_Y_SHIFT = 1.3; // Adjusted from -0.3 to move keyboard up
 const KEY_TEXTURE_BASE_WIDTH_PX = 256; // Increased from 128 for sharper text
 const KEY_TEXTURE_BASE_DEPTH_PX = 256; // Increased from 128 for sharper text
 const KEY_FONT_SIZE = 60; // Increased from 48 for sharper text
-const KEY_TEXT_COLOR = "#ffffff"; // White text
-const KEY_LABEL_BACKGROUND_COLOR = "#222222"; // Dark background for keys
+let KEY_TEXT_COLOR = "#ffffff"; // White text
+let KEY_LABEL_BACKGROUND_COLOR = "#222222"; // Dark background for keys
 
 // Key press animation parameters (moved to global scope)
 const KEY_PRESS_DISTANCE = 0.05; // How far the key moves down when pressed
 const KEY_PRESS_DURATION = 150; // How long the key stays pressed (ms)
-const KEY_PRESSED_COLOR = 0xffaa33; // New: Orange-yellow color for pressed keys
-const KEY_PRESSED_EMISSIVE = 0xffcc66; // New: Lighter orange-yellow glow for pressed keys
-const KEY_PRESSED_EMISSIVE_INTENSITY = 1.5; // New: Increased glow intensity when pressed
+let KEY_PRESSED_COLOR = 0x00ffcc; // Bright teal/cyan for pressed keys
+let KEY_PRESSED_EMISSIVE = 0x00ffcc; // Matching glow for pressed keys
+let KEY_PRESSED_EMISSIVE_INTENSITY = 1.5; // Increased glow intensity when pressed
 const activeKeys = {}; // Track currently pressed keys
 
 const qwertyKeyLayout = [
@@ -504,7 +761,7 @@ const qwertyKeyLayout = [
 ];
 
 // NEW: Map for character to keyId
-export const characterToKeyIdMap = {}; // Added export
+const characterToKeyIdMap = {};
 
 function populateCharacterToKeyIdMap() {
 	qwertyKeyLayout.forEach((row) => {
@@ -563,8 +820,8 @@ function createKeyTexture(label, textureDrawWidthPx, textureDrawHeightPx) {
 
 	const isCircularKey = label !== "Space"; // Assuming Space is the only rectangular key for now
 
-	// Background
-	ctx.fillStyle = KEY_LABEL_BACKGROUND_COLOR; // Whitish plastic color
+	// Background - pure white fill for the entire key
+	ctx.fillStyle = "#ffffff"; // Pure white for key background
 	if (isCircularKey) {
 		ctx.beginPath();
 		ctx.arc(
@@ -579,9 +836,9 @@ function createKeyTexture(label, textureDrawWidthPx, textureDrawHeightPx) {
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 	}
 
-	// Border / Rim
-	const rimLineWidthBase = Math.max(2, Math.min(8, canvas.width * 0.03));
-	ctx.strokeStyle = "#bbbbbb"; // Light gray rim for whitish keys
+	// Subtle border/edge for depth
+	const rimLineWidthBase = Math.max(2, Math.min(8, canvas.width * 0.02));
+	ctx.strokeStyle = "#e0e0e0"; // Very light grey for subtle edge
 	ctx.lineWidth = rimLineWidthBase;
 
 	if (isCircularKey) {
@@ -604,8 +861,8 @@ function createKeyTexture(label, textureDrawWidthPx, textureDrawHeightPx) {
 		);
 	}
 
-	// Text
-	ctx.fillStyle = KEY_TEXT_COLOR; // Black text
+	// Text - pure black
+	ctx.fillStyle = "#000000"; // Pure black text
 	let fontSize = KEY_FONT_SIZE;
 	// Adjust max width/height for text based on circular or rectangular key shape
 	const textPadding = rimLineWidthBase * 2; // Padding from the rim
@@ -614,7 +871,7 @@ function createKeyTexture(label, textureDrawWidthPx, textureDrawHeightPx) {
 		: canvas.width - textPadding; // Approx for circle inscribed square
 	const maxLabelHeight = canvas.height - textPadding;
 
-	ctx.font = `${fontSize}px "Arial", sans-serif`;
+	ctx.font = `bold ${fontSize}px "Arial", sans-serif`; // Added bold for better visibility
 	let textMetrics = ctx.measureText(label);
 	let textWidth = textMetrics.width;
 
@@ -623,7 +880,7 @@ function createKeyTexture(label, textureDrawWidthPx, textureDrawHeightPx) {
 		fontSize > 8
 	) {
 		fontSize -= 2;
-		ctx.font = `${fontSize}px "Arial", sans-serif`;
+		ctx.font = `bold ${fontSize}px "Arial", sans-serif`; // Keep bold
 		textMetrics = ctx.measureText(label);
 		textWidth = textMetrics.width;
 	}
@@ -752,9 +1009,19 @@ function createKey(keyInfo) {
 }
 
 // Create Palm
-const palmGeometry = new THREE.BoxGeometry(PALM_WIDTH, PALM_HEIGHT, PALM_DEPTH);
-const leftPalm = new THREE.Mesh(palmGeometry, boneMaterial);
-const rightPalm = new THREE.Mesh(palmGeometry.clone(), boneMaterial.clone());
+// const palmGeometry = new THREE.BoxGeometry(PALM_WIDTH, PALM_HEIGHT, PALM_DEPTH); // RE-ENABLED
+// const palmRadius = PALM_HEIGHT / 2;
+// const palmLength = PALM_WIDTH;
+// const palmGeometry = new THREE.CylinderGeometry(
+// 	palmRadius,
+// 	palmRadius,
+// 	palmLength,
+// 	16
+// );
+// palmGeometry.rotateZ(Math.PI / 2); // Rotate to lay flat, length along X-axis
+
+// const leftPalm = new THREE.Mesh(palmGeometry, boneMaterial); // RE-ENABLED
+// const rightPalm = new THREE.Mesh(palmGeometry.clone(), boneMaterial.clone()); // RE-ENABLED
 
 // Create Hand Groups
 const leftHandGroup = new THREE.Group();
@@ -763,13 +1030,13 @@ const rightHandGroup = new THREE.Group();
 const HAND_X_OFFSET = 0.0; // Define the offset for hand positioning
 
 // Position the left hand (previously was just "handGroup")
-leftHandGroup.position.y = -KEYBOARD_GLOBAL_Y_SHIFT / 2; // Moved hands down
-leftHandGroup.position.x = KEYBOARD_GLOBAL_Y_SHIFT * 0.9 + HAND_X_OFFSET;
+leftHandGroup.position.y = -KEYBOARD_GLOBAL_Y_SHIFT / 4;
+leftHandGroup.position.x = KEYBOARD_GLOBAL_Y_SHIFT * 0.9 + HAND_X_OFFSET; // Shifted right
 leftHandGroup.position.z = -KEYBOARD_GLOBAL_Y_SHIFT / 10.2;
 
 // Position the right hand (mirrored from left hand)
-rightHandGroup.position.y = -KEYBOARD_GLOBAL_Y_SHIFT / 2; // Moved hands down
-rightHandGroup.position.x = -KEYBOARD_GLOBAL_Y_SHIFT * 0.9 - HAND_X_OFFSET;
+rightHandGroup.position.y = -KEYBOARD_GLOBAL_Y_SHIFT / 4;
+rightHandGroup.position.x = -KEYBOARD_GLOBAL_Y_SHIFT * 0.9 - HAND_X_OFFSET; // Shifted left
 rightHandGroup.position.z = -KEYBOARD_GLOBAL_Y_SHIFT / 10.2;
 
 // Left Hand Rotation
@@ -789,8 +1056,118 @@ const initialRightHandRotation = rightHandGroup.rotation.clone();
 
 scene.add(leftHandGroup);
 scene.add(rightHandGroup);
-leftHandGroup.add(leftPalm);
-rightHandGroup.add(rightPalm);
+// leftHandGroup.add(leftPalm); // RE-ENABLED // REMOVED OLD PALM
+// rightHandGroup.add(rightPalm); // RE-ENABLED // REMOVED OLD PALM
+
+// Apply X-axis rotation to palms for a more natural orientation
+// const PALM_X_ROTATION = Math.PI / 12; // 15 degrees tilt // REMOVED OLD PALM ROTATION
+// leftPalm.rotation.x = PALM_X_ROTATION; // REMOVED OLD PALM ROTATION
+// rightPalm.rotation.x = PALM_X_ROTATION; // REMOVED OLD PALM ROTATION
+
+// NEW: Helper function to create a segment for the palm border
+function createPalmSegment(startVec, endVec, radius, material, name) {
+	const direction = new THREE.Vector3().subVectors(endVec, startVec);
+	const length = direction.length();
+	const segmentGeom = new THREE.CylinderGeometry(radius, radius, length, 12);
+
+	const orientation = new THREE.Quaternion();
+	const up = new THREE.Vector3(0, 1, 0); // Default cylinder orientation
+	orientation.setFromUnitVectors(up, direction.clone().normalize());
+
+	const segmentMesh = new THREE.Mesh(segmentGeom, material);
+	segmentMesh.name = name;
+	segmentMesh.applyQuaternion(orientation);
+	segmentMesh.position
+		.copy(startVec)
+		.add(direction.clone().multiplyScalar(0.5)); // Position at midpoint
+
+	segmentMesh.castShadow = true;
+	segmentMesh.receiveShadow = true;
+	return segmentMesh;
+}
+
+// NEW: Function to create the palm outline
+function createPalmOutline(handGroup, material) {
+	const palmRectWidth = PALM_WIDTH;
+	// Fingers are attached at y = PALM_HEIGHT / 2.
+	// Place the top edge of the new palm outline at y = 0 in handGroup local space.
+	const palmTopY = 0;
+	const palmBottomY = palmTopY - PALM_BORDER_RECT_DEPTH;
+
+	const c1_TopLeft = new THREE.Vector3(-palmRectWidth / 2, palmTopY, 0);
+	const c2_TopRight = new THREE.Vector3(palmRectWidth / 2, palmTopY, 0);
+	const c3_BottomRight = new THREE.Vector3(palmRectWidth / 2, palmBottomY, 0);
+	const c4_BottomLeft = new THREE.Vector3(-palmRectWidth / 2, palmBottomY, 0);
+
+	const jointGeom = new THREE.SphereGeometry(PALM_BORDER_JOINT_RADIUS, 12, 8);
+	const jointMaterial = material.clone(); // Use a clone for joints
+
+	const joint1 = new THREE.Mesh(jointGeom, jointMaterial);
+	joint1.position.copy(c1_TopLeft);
+	joint1.name = "palmJoint_TL";
+	joint1.castShadow = true;
+	joint1.receiveShadow = true;
+	handGroup.add(joint1);
+
+	const joint2 = new THREE.Mesh(jointGeom, jointMaterial);
+	joint2.position.copy(c2_TopRight);
+	joint2.name = "palmJoint_TR";
+	joint2.castShadow = true;
+	joint2.receiveShadow = true;
+	handGroup.add(joint2);
+
+	const joint3 = new THREE.Mesh(jointGeom, jointMaterial);
+	joint3.position.copy(c3_BottomRight);
+	joint3.name = "palmJoint_BR";
+	joint3.castShadow = true;
+	joint3.receiveShadow = true;
+	handGroup.add(joint3);
+
+	const joint4 = new THREE.Mesh(jointGeom, jointMaterial);
+	joint4.position.copy(c4_BottomLeft);
+	joint4.name = "palmJoint_BL";
+	joint4.castShadow = true;
+	joint4.receiveShadow = true;
+	handGroup.add(joint4);
+
+	const segmentMaterial = material.clone(); // Use a clone for segments
+
+	const segmentTop = createPalmSegment(
+		c1_TopLeft,
+		c2_TopRight,
+		PALM_BORDER_BONE_RADIUS,
+		segmentMaterial,
+		"palmSegment_Top"
+	);
+	handGroup.add(segmentTop);
+
+	const segmentRight = createPalmSegment(
+		c2_TopRight,
+		c3_BottomRight,
+		PALM_BORDER_BONE_RADIUS,
+		segmentMaterial,
+		"palmSegment_Right"
+	);
+	handGroup.add(segmentRight);
+
+	const segmentBottom = createPalmSegment(
+		c3_BottomRight,
+		c4_BottomLeft,
+		PALM_BORDER_BONE_RADIUS,
+		segmentMaterial,
+		"palmSegment_Bottom"
+	);
+	handGroup.add(segmentBottom);
+
+	const segmentLeft = createPalmSegment(
+		c4_BottomLeft,
+		c1_TopLeft,
+		PALM_BORDER_BONE_RADIUS,
+		segmentMaterial,
+		"palmSegment_Left"
+	);
+	handGroup.add(segmentLeft);
+}
 
 // Create and position fingers for left hand
 const leftFingers = [];
@@ -845,6 +1222,11 @@ for (let i = 0; i < numFingers; i++) {
 	rightHandGroup.add(finger);
 	rightFingers.push(finger);
 }
+
+// NEW: Create palm outlines after hand groups are set up and fingers potentially added
+// The boneMaterial will be styled by setupProfessionalLook before this is effectively used in rendering loop.
+createPalmOutline(leftHandGroup, boneMaterial);
+createPalmOutline(rightHandGroup, boneMaterial);
 
 // Global references for IK
 const ikTargets = {};
@@ -1270,6 +1652,7 @@ function onMouseUp(event) {
 		for (const fingerId of ikControlledFingers) {
 			if (ikTargets[fingerId]) {
 				const intersects = raycaster.intersectObject(ikTargets[fingerId]);
+
 				if (intersects.length > 0) {
 					hoveringOverAnyTarget = true;
 					break;
@@ -1383,71 +1766,77 @@ function animateFingerToKey(fingerIdToAnimate, targetKeyIdToPress) {
 // NEW: Caps Lock state and visuals // This comment can remain or be removed, the declarations below are targeted
 // [LINES 1079-1083 will be deleted here]
 
-// Extracted original keydown listener logic
-function _executeKeyDown(keyCode, key) {
-	// Renamed from _onGlobalKeyDown, params changed
-	// const pressedKeyId = event.code; // Now passed as keyCode
-	const pressedKeyId = keyCode;
+window.addEventListener("keydown", (event) => {
+	if (event.repeat) return; // Ignore repeated events from holding key down
+
+	const pressedKeyId = event.code;
 
 	// If hiddenInput is active, mobile keyboard is up, let its input handler manage text & animations
-	// This check might need to be re-evaluated if called programmatically without a real DOM focus
 	if (document.activeElement === hiddenInput) {
 		// Allow default behavior for certain keys like backspace if needed, but generally let the input event handle it.
 		// For example, to prevent browser back on backspace:
-		// if (key === "Backspace") event.preventDefault(); // event object not available here directly
-		// if (key === "Enter") event.preventDefault(); // event object not available here directly
-		return;
+		if (event.key === "Backspace") event.preventDefault();
+		if (event.key === "Enter") event.preventDefault();
+		// DO NOT return here! Let the rest of the handler run for finger animation.
 	}
 
 	// --- Update Typed Text Display --- START
+	// This section will now primarily be driven by the hiddenInput's "input" event for mobile.
+	// For physical keyboards, this existing logic can remain as a fallback or for desktop.
+	// We need to avoid double-processing if hiddenInput is active.
 	if (document.activeElement !== hiddenInput) {
 		if (typedTextString === "Start typing...") {
-			typedTextString = "";
+			typedTextString = ""; // Clear placeholder on first actual key press relevant to typing
 		}
 
-		if (key && key.length === 1) {
-			// Use passed 'key' parameter
-			typedTextString += key;
-		} else if (key === "Backspace") {
-			// Use passed 'key' parameter
+		if (event.key.length === 1) {
+			// Most printable characters (letters, numbers, symbols)
+			typedTextString += event.key;
+		} else if (event.key === "Backspace") {
 			typedTextString = typedTextString.slice(0, -1);
-			// event.preventDefault(); // Not available directly
-		} else if (key === "Enter") {
-			// Use passed 'key' parameter
-			typedTextString += "\\n";
-			// event.preventDefault(); // Not available directly
-		} else if (key === " ") {
-			// Use passed 'key' parameter for space, keyCode is "Space"
+			event.preventDefault(); // Prevent browser back navigation
+		} else if (event.key === "Enter") {
+			typedTextString += "\n"; // Add newline character
+			event.preventDefault(); // Prevent form submission if any
+		} else if (event.key === " ") {
+			// Spacebar (event.code is "Space")
 			typedTextString += " ";
-			// event.preventDefault(); // Not available directly
+			event.preventDefault();
 		}
+		// More specific key handling can be added here (e.g., Tab)
 
-		typedTextDisplay.textContent = typedTextString || " ";
+		typedTextDisplay.textContent = typedTextString || " "; // Show a space if string is empty to maintain height
+		// Also update hiddenInput if it's not the source, to keep them synced.
 		if (hiddenInput && hiddenInput.value !== typedTextString) {
 			hiddenInput.value = typedTextString;
 		}
 	}
 	// --- Update Typed Text Display --- END
 
-	console.log(`Key Down Executed: ${pressedKeyId}, key: ${key}`);
+	// Add debug message for key press
+	console.log(`Key pressed: ${pressedKeyId}, event.key: ${event.key}`);
 
+	// Play key press sound only if not handled by hiddenInput's input event
 	if (
 		document.activeElement !== hiddenInput &&
 		keyPressSound &&
 		keyPressSound.buffer
 	) {
+		// Determine new random parameters
 		const newPlaybackRate = 0.9 + Math.random() * 0.2;
-		const newDetuneValue = (Math.random() - 0.5) * 100;
+		const newDetuneValue = (Math.random() - 0.5) * 100; // Range -50 to 50
 		const newVolumeValue = 0.7 + Math.random() * 0.3;
 
+		// Update the audio object's properties for the next play()
 		keyPressSound.playbackRate = newPlaybackRate;
 		keyPressSound.detune = newDetuneValue;
+		// setVolume is generally safe as it affects the GainNode directly
 		keyPressSound.setVolume(newVolumeValue);
 
 		if (keyPressSound.isPlaying) {
-			keyPressSound.stop();
+			keyPressSound.stop(); // Stop current playback if any, to allow retriggering with new variations
 		}
-		keyPressSound.play();
+		keyPressSound.play(); // play() will use the .playbackRate and .detune properties set above
 	}
 
 	const keyboardGroup = scene.getObjectByName("keyboard");
@@ -1457,25 +1846,33 @@ function _executeKeyDown(keyCode, key) {
 	}
 	const keyMesh = keyboardGroup.getObjectByName(pressedKeyId);
 	if (!keyMesh) {
-		return;
+		// console.warn(`Key ${pressedKeyId} not found on keyboard.`);
+		return; // Not a key we manage or it's missing
 	}
 
+	// If hiddenInput is active, don't do finger assignments or press animations here
 	if (document.activeElement === hiddenInput) {
 		return;
 	}
 
+	// If this key is already assigned to a finger, do nothing (or handle repeat if desired)
+	// UPDATED: Remove special case for CapsLock - treat it like any other key for finger assignment
 	if (keyAssignments[pressedKeyId]) {
+		// console.log(`Key ${pressedKeyId} is already being pressed by ${keyAssignments[pressedKeyId]}`);
 		return;
 	}
 
+	// Standard key press animation and finger assignment
+	// UPDATED: Remove special case for CapsLock - just find a finger and press the key
 	const keyTargetPosition = new THREE.Vector3();
 	const localKeyTopCenter = new THREE.Vector3(0, 0, KEY_HEIGHT / 2);
 	localKeyTopCenter.applyMatrix4(keyMesh.matrixWorld);
-	keyTargetPosition.copy(localKeyTopCenter);
+	keyTargetPosition.copy(localTopCenter);
 
 	let bestFingerId = null;
 	let minDistanceSq = Infinity;
 
+	// Find the nearest available finger
 	ikControlledFingers.forEach((fingerId) => {
 		if (!fingerAssignments[fingerId]) {
 			const fingertipVisual = fingertipVisuals[fingerId];
@@ -1522,55 +1919,64 @@ function _executeKeyDown(keyCode, key) {
 		keyAssignments[pressedKeyId] = bestFingerId;
 
 		animateFingerToKey(bestFingerId, pressedKeyId);
-		animateKeyPress(pressedKeyId, true);
+		animateKeyPress(pressedKeyId, true); // Visual press animation for the key
 	} else {
 		console.warn(`No available finger found to press key ${pressedKeyId}`);
+		// Still visually press the key even if no finger is available
 		animateKeyPress(pressedKeyId, true);
 	}
-}
-export function executeKeyDown(keyCode, key) {
-	// Renamed from processKeyDown
-	_executeKeyDown(keyCode, key);
-}
 
-// Extracted original keyup listener logic
-function _executeKeyUp(keyCode) {
-	// Renamed from _onGlobalKeyUp, param changed
-	// const releasedKeyId = event.code; // Now passed as keyCode
-	const releasedKeyId = keyCode;
+	// CapsLock specific logic: toggle state and update visuals
+	// This is SEPARATE from finger animation - it just affects the key's visual state
+	// if (pressedKeyId === CAPS_LOCK_KEY_ID) { // REMOVED
+	// 	isCapsLockActive = !isCapsLockActive; // REMOVED
+	// 	console.log( // REMOVED
+	// 		`CapsLock state toggled. isCapsLockActive: ${isCapsLockActive}` // REMOVED
+	// 	); // REMOVED
+	// } // REMOVED
+});
+
+window.addEventListener("keyup", (event) => {
+	const releasedKeyId = event.code;
 
 	// If hiddenInput is active, mobile keyboard is up, let its input handler manage animations (or ignore for keyup)
-	// This check might need to be re-evaluated if called programmatically
 	if (document.activeElement === hiddenInput) {
 		return;
 	}
 
-	console.log(`Key Up Executed: ${releasedKeyId}`);
+	// Add debug message for key release
+	console.log(`Key released: ${releasedKeyId}`);
 
+	// Play key release sound only if not handled by hiddenInput's input event
 	if (
 		document.activeElement !== hiddenInput &&
 		keyReleaseSound &&
 		keyReleaseSound.buffer
 	) {
+		// Determine new random parameters
 		const newPlaybackRate = 0.9 + Math.random() * 0.2;
-		const newDetuneValue = (Math.random() - 0.5) * 100;
+		const newDetuneValue = (Math.random() - 0.5) * 100; // Range -50 to 50
 		const newVolumeValue = 0.7 + Math.random() * 0.3;
 
+		// Update the audio object's properties for the next play()
 		keyReleaseSound.playbackRate = newPlaybackRate;
 		keyReleaseSound.detune = newDetuneValue;
-		keyReleaseSound.setVolume(newVolumeValue);
+		keyReleaseSound.setVolume(newVolumeValue); // setVolume is generally safe
 
 		if (keyReleaseSound.isPlaying) {
-			keyReleaseSound.stop();
+			keyReleaseSound.stop(); // Stop current playback if any, to allow retriggering with new variations
 		}
-		keyReleaseSound.play();
+		keyReleaseSound.play(); // play() will use the .playbackRate and .detune properties set above
 	}
 
+	// Always visually release the key
 	animateKeyPress(releasedKeyId, false);
 
 	const fingerToReset = keyAssignments[releasedKeyId];
 
 	if (fingerToReset) {
+		// If hiddenInput is active, don't mess with finger assignments here.
+		// This check is a bit redundant due to the early return, but safe.
 		if (document.activeElement === hiddenInput) {
 			return;
 		}
@@ -1580,36 +1986,39 @@ function _executeKeyUp(keyCode) {
 		);
 		if (ikTargets[fingerToReset] && ikTargetRestPositions[fingerToReset]) {
 			isFingerReturningToRest[fingerToReset] = true;
+			// The animate loop will handle ikTargetDestinations for resting
 
+			// Clear assignments - this happens even for CapsLock
 			fingerAssignments[fingerToReset] = null;
 			keyAssignments[releasedKeyId] = null;
 		} else {
 			console.warn(
 				`Cannot reset finger ${fingerToReset}: IK target or rest position undefined.`
 			);
+			// Still clear assignments if finger data is somehow corrupt but was assigned
 			fingerAssignments[fingerToReset] = null;
 			keyAssignments[releasedKeyId] = null;
 		}
 	} else {
 		console.warn(`No finger assigned to key: ${releasedKeyId}`);
 	}
-}
-export function executeKeyUp(keyCode) {
-	// Renamed from processKeyUp
-	_executeKeyUp(keyCode);
-}
 
-// Extracted original CapsLock specific keydown listener
-function _executeCapsLockSpecificKeyDown(keyCode) {
-	// Renamed, param changed
-	// This check might need to be re-evaluated if called programmatically
-	if (document.activeElement === hiddenInput && keyCode === "CapsLock") {
-		// event.preventDefault(); // Not available
+	// This is now handled by releaseKey, so the setTimeout block below is removed.
+});
+
+// Add a special handler specifically for Caps Lock to handle OS-level quirks
+document.addEventListener("keydown", function (event) {
+	// If hiddenInput is active, mobile keyboard is up, let its input handler manage.
+	if (document.activeElement === hiddenInput && event.code === "CapsLock") {
+		event.preventDefault(); // Prevent default if any, but mostly rely on input handler.
 		return;
 	}
-	if (keyCode === "CapsLock") {
-		console.log("CapsLock keydown execute by specific handler");
+	// Special handling for Caps Lock to ensure finger always returns to rest
+	if (event.code === "CapsLock") {
+		console.log("CapsLock keydown detected by special handler");
 
+		// Force release any finger assigned to CapsLock after a short delay
+		// This ensures the finger doesn't stay attached to the key due to OS behavior
 		setTimeout(() => {
 			const capsLockKey = "CapsLock";
 			const fingerOnCapsLock = keyAssignments[capsLockKey];
@@ -1623,25 +2032,21 @@ function _executeCapsLockSpecificKeyDown(keyCode) {
 				keyAssignments[capsLockKey] = null;
 			}
 
+			// Ensure the key itself is visually released
 			animateKeyPress(capsLockKey, false);
-		}, 150);
+		}, 150); // Reduced delay to make it feel more responsive while still showing animation
 	}
-}
-export function executeCapsLockSpecificKeyDown(keyCode) {
-	// Renamed
-	_executeCapsLockSpecificKeyDown(keyCode);
-}
+});
 
-// Extracted original CapsLock specific keyup listener
-function _executeCapsLockSpecificKeyUp(keyCode) {
-	// Renamed, param changed
-	// This check might need to be re-evaluated if called programmatically
-	if (document.activeElement === hiddenInput && keyCode === "CapsLock") {
+// Add an explicit keyup listener specifically for Caps Lock
+document.addEventListener("keyup", function (event) {
+	// If hiddenInput is active, mobile keyboard is up, let its input handler manage.
+	if (document.activeElement === hiddenInput && event.code === "CapsLock") {
 		return;
 	}
-	if (keyCode === "CapsLock") {
+	if (event.code === "CapsLock") {
 		console.log(
-			"CapsLock keyup execute by specific handler - immediate release"
+			"CapsLock keyup detected by special handler - immediate release"
 		);
 		const capsLockKey = "CapsLock";
 		const fingerOnCapsLock = keyAssignments[capsLockKey];
@@ -1654,17 +2059,14 @@ function _executeCapsLockSpecificKeyUp(keyCode) {
 			fingerAssignments[fingerOnCapsLock] = null;
 			keyAssignments[capsLockKey] = null;
 
+			// Ensure the key is visually released
 			animateKeyPress(capsLockKey, false);
 		}
 	}
-}
-export function executeCapsLockSpecificKeyUp(keyCode) {
-	// Renamed
-	_executeCapsLockSpecificKeyUp(keyCode);
-}
+});
 
 // Add a special reset function that can be called from console if needed
-export function resetAllFingers() {
+window.resetAllFingers = function () {
 	console.log("Manually resetting all fingers");
 	// Reset all finger assignments
 	for (const fingerId in fingerAssignments) {
@@ -1689,7 +2091,7 @@ export function resetAllFingers() {
 			}
 		}
 	}
-}
+};
 
 /**
  * Animates a key being pressed down or released
@@ -1740,31 +2142,19 @@ function animateKeyPress(keyId, isPressed) {
 		// Move the key down along the Z-axis
 		keyMesh.position.z = activeKeys[keyId].originalZ - KEY_PRESS_DISTANCE;
 
-		// Remove special Caps Lock color handling
-		const keyColor = KEY_PRESSED_COLOR;
-		const keyEmissive = KEY_PRESSED_EMISSIVE;
-
-		// Change key color and increase glow
+		// Simple darkening effect for pressed keys - more subtle for professional look
 		if (Array.isArray(keyMesh.material)) {
-			// Apply to all materials but focus on top face
 			keyMesh.material.forEach((mat, index) => {
-				// Slight color change for all faces
-				mat.color.lerp(new THREE.Color(keyColor), 0.3);
-
-				// Increase emissive properties for all faces
+				mat.color.lerp(new THREE.Color(KEY_PRESSED_COLOR), 0.5);
 				if (mat.emissive) {
-					mat.emissive.setHex(keyEmissive);
-					// Top face gets more intense glow
-					mat.emissiveIntensity =
-						index === 4
-							? KEY_PRESSED_EMISSIVE_INTENSITY
-							: KEY_PRESSED_EMISSIVE_INTENSITY * 0.5;
+					mat.emissive.setHex(KEY_PRESSED_EMISSIVE);
+					mat.emissiveIntensity = KEY_PRESSED_EMISSIVE_INTENSITY;
 				}
 			});
 		} else {
-			keyMesh.material.color.lerp(new THREE.Color(keyColor), 0.3);
+			keyMesh.material.color.lerp(new THREE.Color(KEY_PRESSED_COLOR), 0.5);
 			if (keyMesh.material.emissive) {
-				keyMesh.material.emissive.setHex(keyEmissive);
+				keyMesh.material.emissive.setHex(KEY_PRESSED_EMISSIVE);
 				keyMesh.material.emissiveIntensity = KEY_PRESSED_EMISSIVE_INTENSITY;
 			}
 		}
@@ -1786,6 +2176,9 @@ function releaseKey(keyId) {
 
 	// Restore original position along Z-axis
 	keyMesh.position.z = activeKeys[keyId].originalZ;
+
+	// Reset scale
+	keyMesh.scale.set(1, 1, 1);
 
 	// Restore original colors and emissive properties
 	if (Array.isArray(keyMesh.material)) {
@@ -1815,11 +2208,6 @@ function releaseKey(keyId) {
 			keyMesh.material.emissiveIntensity = 0;
 		}
 	}
-
-	// If this is the CapsLock key, update its persistent visual state
-	// if (keyId === CAPS_LOCK_KEY_ID) { // REMOVED
-	// 	updateCapsLockKeyVisualState(); // REMOVED
-	// } // REMOVED
 
 	// Clean up
 	delete activeKeys[keyId];
@@ -1868,7 +2256,7 @@ audioLoader.load(
 );
 
 // Function to resume AudioContext on user interaction
-export function resumeAudioContext() {
+function resumeAudioContext() {
 	if (listener && listener.context && listener.context.state === "suspended") {
 		listener.context
 			.resume()
@@ -1876,52 +2264,19 @@ export function resumeAudioContext() {
 				console.log(
 					"AudioContext resumed successfully after user interaction."
 				);
-				// Remove these listeners after the first interaction to avoid multiple calls
-				window.removeEventListener("click", resumeAudioContext);
-				window.removeEventListener("keydown", resumeAudioContext, true);
 			})
 			.catch((e) => {
 				console.error("Error resuming AudioContext:", e);
 			});
 	}
+	// Remove these listeners after the first interaction to avoid multiple calls
+	window.removeEventListener("click", resumeAudioContext);
+	window.removeEventListener("keydown", resumeAudioContext, true); // Use capture for keydown
 }
 
-// NEW: Centralized Post-Processing Setup (moved and refined)
-let composer = null;
-let bloomPass = null;
-
-if (renderer && scene && camera) {
-	composer = new EffectComposer(renderer);
-	composer.addPass(new RenderPass(scene, camera));
-
-	const ssaoPass = new SSAOPass(
-		scene,
-		camera,
-		window.innerWidth,
-		window.innerHeight
-	);
-	ssaoPass.kernelRadius = 12; // Reduced from 16 for less fogginess
-	ssaoPass.minDistance = 0.005; // Default 0.005, adjust based on scene scale
-	ssaoPass.maxDistance = 0.1; // Default 0.1, adjust based on scene scale
-	// ssaoPass.output = SSAOPass.OUTPUT.SSAO; // For debugging AO only
-	composer.addPass(ssaoPass);
-
-	bloomPass = new UnrealBloomPass(
-		new THREE.Vector2(window.innerWidth, window.innerHeight),
-		0.25, // strength reduced from 0.4 to 0.25
-		0.25, // radius reduced from 0.3 to 0.25
-		0.92 // threshold increased from 0.9 to 0.92
-	);
-	composer.addPass(bloomPass);
-
-	const outputPass = new OutputPass();
-	composer.addPass(outputPass);
-	console.log("EffectComposer initialized successfully with SSAO and Bloom.");
-} else {
-	console.error(
-		"Renderer, scene, or camera not ready for EffectComposer. Post-processing disabled."
-	);
-}
+// Add listeners for the first user interaction
+window.addEventListener("click", resumeAudioContext);
+window.addEventListener("keydown", resumeAudioContext, true); // Use capture for keydown to catch it early
 
 function animate() {
 	requestAnimationFrame(animate);
@@ -1930,6 +2285,9 @@ function animate() {
 	let isLeftHandActive = false;
 	let isRightHandActive = false;
 	const time = Date.now() * 0.001; // Time for sinusoidal movements
+
+	// Update hand colors with rainbow cycling effect
+	updateHandColors(time);
 
 	if (orbitControls) {
 		orbitControls.update();
@@ -2506,10 +2864,15 @@ function createFinger(fingerId) {
 		currentRadius *= 0.85; // Ring finger is thinner
 	else if (fingerId.includes("middle")) currentRadius *= 0.95; // Middle finger maintains thickness
 
+	// Get specific material for this finger
+	const fingerSpecificMaterial = fingerMaterialMap[fingerId] || boneMaterial;
+
 	// Create the base joint connecting to palm
+	const jointRadius = currentRadius * JOINT_RADIUS_FACTOR;
 	const fingerBaseJoint = createJoint(
 		"finger_base_" + fingerId,
-		currentRadius * JOINT_RADIUS_FACTOR
+		jointRadius,
+		fingerSpecificMaterial
 	);
 	let currentJoint = fingerBaseJoint;
 
@@ -2526,7 +2889,8 @@ function createFinger(fingerId) {
 		actualMetacarpalLength,
 		currentRadius,
 		metacarpalEndRadius,
-		metacarpalBoneName
+		metacarpalBoneName,
+		fingerSpecificMaterial
 	);
 	currentJoint.add(metacarpalBone);
 
@@ -2542,7 +2906,8 @@ function createFinger(fingerId) {
 		const phalanxJointName = "phalanx_joint_" + i + "_" + fingerId;
 		const nextJoint = createJoint(
 			phalanxJointName,
-			currentRadius * JOINT_RADIUS_FACTOR
+			currentRadius * JOINT_RADIUS_FACTOR,
+			fingerSpecificMaterial
 		);
 		nextJoint.position.y =
 			i === 0 ? actualMetacarpalLength : actualPhalanxLength;
@@ -2557,7 +2922,8 @@ function createFinger(fingerId) {
 			actualPhalanxLength,
 			currentRadius,
 			phalanxEndRadius,
-			phalanxBoneName
+			phalanxBoneName,
+			fingerSpecificMaterial
 		);
 		nextJoint.add(phalanxBone);
 
@@ -2574,7 +2940,10 @@ function createFinger(fingerId) {
 				FINGERTIP_RADIUS
 			);
 			const fingertipGeometry = new THREE.SphereGeometry(tipRadius, 16, 12);
-			const fingertip = new THREE.Mesh(fingertipGeometry, fingertipMaterial);
+			const fingertip = new THREE.Mesh(
+				fingertipGeometry,
+				fingerSpecificMaterial
+			);
 			fingertip.name = fingertipVisualName;
 			fingertip.position.y = actualPhalanxLength;
 			fingertip.castShadow = true;
@@ -2588,7 +2957,7 @@ function createFinger(fingerId) {
 // --- End Key Press Animation Logic ---
 
 // Add floor/ground for context and shadows
-/* function addGround() {
+function addGround() {
 	const groundGeometry = new THREE.PlaneGeometry(30, 30);
 	const groundMaterial = new THREE.MeshStandardMaterial({
 		color: 0xdddddd,
@@ -2602,4 +2971,465 @@ function createFinger(fingerId) {
 	ground.receiveShadow = true;
 	scene.add(ground);
 }
-addGround(); */
+addGround();
+
+// Change renderer settings for professional look
+function setupProfessionalLook() {
+	// Black background
+	renderer.setClearColor(0x000000);
+	renderer.toneMappingExposure = 1.0; // Standard exposure
+
+	// Adjust lighting for professional look
+	hemisphereLight.intensity = 0.7;
+	hemisphereLight.color.set(0xffffff);
+	hemisphereLight.groundColor.set(0x444444);
+
+	directionalLight.intensity = 1.5;
+	directionalLight.color.set(0xffffff);
+
+	// Remove any existing colored point lights or reduce their intensity
+	pointLight1.intensity = 0.3;
+	pointLight1.color.set(0xffffff);
+	pointLight2.intensity = 0.3;
+	pointLight2.color.set(0xffffff);
+
+	// Find and remove any additional point lights (like pointLight3)
+	const pointLight3 = scene.children.find(
+		(child) =>
+			child instanceof THREE.PointLight &&
+			child !== pointLight1 &&
+			child !== pointLight2 &&
+			child !== directionalLight
+	);
+
+	if (pointLight3) {
+		scene.remove(pointLight3);
+	}
+
+	// Find and remove any ground/floor
+	const ground = scene.children.find(
+		(child) =>
+			child instanceof THREE.Mesh &&
+			child.geometry instanceof THREE.PlaneGeometry &&
+			child.position.y < 0
+	);
+
+	if (ground) {
+		scene.remove(ground);
+	}
+
+	// Update bloom settings for more subtle effect
+	if (bloomPass) {
+		bloomPass.strength = 0.2;
+		bloomPass.radius = 0.3;
+		bloomPass.threshold = 0.7;
+	}
+
+	// Update the key materials to be white plastic with black text
+	keyMaterial.color.set(0xf0f0f0); // White plastic
+	keyMaterial.roughness = 0.7; // Plastic-like roughness
+	keyMaterial.metalness = 0.05; // Very low for plastic
+	keyMaterial.emissive.set(0x000000); // No emissive
+	keyMaterial.emissiveIntensity = 0.0;
+
+	keyTopMaterial.color.set(0xffffff); // Pure white for top
+	keyTopMaterial.roughness = 0.6; // Slightly smoother top
+	keyTopMaterial.metalness = 0.05; // Very low for plastic
+	keyTopMaterial.emissive.set(0x000000); // No emissive
+	keyTopMaterial.emissiveIntensity = 0.0;
+
+	// Update texture label parameters
+	KEY_TEXT_COLOR = "#000000"; // Black text
+	KEY_LABEL_BACKGROUND_COLOR = "#ffffff"; // White background for keys
+
+	// Update key press animation parameters
+	KEY_PRESSED_COLOR = 0xdddddd; // Slightly darker white for pressed keys
+	KEY_PRESSED_EMISSIVE = 0x222222; // Very subtle glow for pressed keys
+	KEY_PRESSED_EMISSIVE_INTENSITY = 0.2; // Minimal glow intensity
+
+	// Update existing finger materials to be more professional
+	// Make all fingers a skin tone
+	const skinToneColor = new THREE.Color(0xd2b48c); // Tan skin tone
+
+	// Update all finger materials
+	for (const fingerId in fingerMaterialMap) {
+		const material = fingerMaterialMap[fingerId];
+		if (material) {
+			material.color.copy(skinToneColor);
+			material.roughness = 0.7; // Skin-like roughness
+			material.metalness = 0.05; // Skin is not very metallic
+			material.emissive.set(0x000000);
+			material.emissiveIntensity = 0.0;
+
+			// Ensure material is opaque
+			material.transparent = false;
+
+			if (material.transmission) material.transmission = 0; // Remove transmission if it exists
+		}
+	}
+
+	// Also ensure the base boneMaterial (used for palms) is skin-toned and opaque
+	if (boneMaterial) {
+		boneMaterial.color.copy(skinToneColor); // Apply skin tone
+		boneMaterial.roughness = 0.7;
+		boneMaterial.metalness = 0.05;
+		boneMaterial.emissive.set(0x000000);
+		boneMaterial.emissiveIntensity = 0.0;
+		boneMaterial.transparent = false;
+		boneMaterial.opacity = 1.0;
+		if (boneMaterial.transmission) boneMaterial.transmission = 0;
+	}
+
+	// Override the updateHandColors function to do nothing
+	updateHandColors = function (time) {
+		// No color cycling in professional mode
+		// Fingers remain static dark grey
+	};
+
+	// Override the animateKeyPress function for more subtle effects
+	window.originalAnimateKeyPress = animateKeyPress; // Save the original for possible restoration
+
+	animateKeyPress = function (keyId, isPressed) {
+		const keyboardGroup = scene.getObjectByName("keyboard");
+		if (!keyboardGroup) return;
+
+		const keyMesh = keyboardGroup.getObjectByName(keyId);
+		if (!keyMesh) return;
+
+		// Clear any existing timeout for this key
+		if (activeKeys[keyId]) {
+			clearTimeout(activeKeys[keyId].timeout);
+		}
+
+		if (isPressed) {
+			// Store original key position and material colors if not already stored
+			if (!activeKeys[keyId]) {
+				const originalColors = [];
+				const originalEmissive = [];
+				const originalEmissiveIntensity = [];
+				if (Array.isArray(keyMesh.material)) {
+					keyMesh.material.forEach((mat) => {
+						originalColors.push(mat.color.clone());
+						if (mat.emissive) originalEmissive.push(mat.emissive.clone());
+						else originalEmissive.push(null);
+						originalEmissiveIntensity.push(mat.emissiveIntensity || 0);
+					});
+				} else {
+					originalColors.push(keyMesh.material.color.clone());
+					if (keyMesh.material.emissive)
+						originalEmissive.push(keyMesh.material.emissive.clone());
+					else originalEmissive.push(null);
+					originalEmissiveIntensity.push(
+						keyMesh.material.emissiveIntensity || 0
+					);
+				}
+
+				activeKeys[keyId] = {
+					originalZ: keyMesh.position.z,
+					originalColors: originalColors,
+					originalEmissive: originalEmissive,
+					originalEmissiveIntensity: originalEmissiveIntensity,
+				};
+			}
+
+			// Move the key down along the Z-axis
+			keyMesh.position.z = activeKeys[keyId].originalZ - KEY_PRESS_DISTANCE;
+
+			// Simple darkening effect for pressed keys - more subtle for professional look
+			if (Array.isArray(keyMesh.material)) {
+				keyMesh.material.forEach((mat, index) => {
+					mat.color.lerp(new THREE.Color(KEY_PRESSED_COLOR), 0.5);
+					if (mat.emissive) {
+						mat.emissive.setHex(KEY_PRESSED_EMISSIVE);
+						mat.emissiveIntensity = KEY_PRESSED_EMISSIVE_INTENSITY;
+					}
+				});
+			} else {
+				keyMesh.material.color.lerp(new THREE.Color(KEY_PRESSED_COLOR), 0.5);
+				if (keyMesh.material.emissive) {
+					keyMesh.material.emissive.setHex(KEY_PRESSED_EMISSIVE);
+					keyMesh.material.emissiveIntensity = KEY_PRESSED_EMISSIVE_INTENSITY;
+				}
+			}
+		} else {
+			releaseKey(keyId);
+		}
+	};
+}
+
+// Call this function to set up professional look
+setupProfessionalLook();
+
+// Create enhanced visuals with better post-processing
+function enhanceVisuals() {
+	// Don't call setupProfessionalLook again to avoid double reassignment
+	// setupProfessionalLook();
+
+	// Fine-tune the renderer settings
+	renderer.toneMappingExposure = 1.2; // Slightly brighter exposure
+	renderer.outputColorSpace = THREE.SRGBColorSpace; // Ensure proper color space
+
+	// Pure white keys with black text
+	keyMaterial.color.set(0xffffff); // Pure white plastic
+	keyMaterial.roughness = 0.7;
+	keyMaterial.metalness = 0.1; // Slight metalness for better reflections
+
+	keyTopMaterial.color.set(0xffffff); // Pure white for top
+	keyTopMaterial.roughness = 0.6;
+	keyTopMaterial.metalness = 0.1;
+
+	// Ensure black text
+	KEY_TEXT_COLOR = "#000000"; // Deep black text
+
+	// Enhanced post-processing
+	if (bloomPass) {
+		// More refined bloom settings
+		bloomPass.strength = 0.35; // Increased from 0.2
+		bloomPass.radius = 0.4; // Slightly wider bloom radius
+		bloomPass.threshold = 0.6; // Lower threshold for more subtle glow
+	}
+
+	// Enhanced SSAO settings
+	const ssaoPass = composer.passes.find((pass) => pass instanceof SSAOPass);
+	if (ssaoPass) {
+		ssaoPass.kernelRadius = 14; // Increased radius
+		ssaoPass.minDistance = 0.004; // Decreased for finer detail
+		ssaoPass.maxDistance = 0.12; // Increased for better depth perception
+	}
+
+	// Add a subtle vignette effect
+	const renderPass = composer.passes.find((pass) => pass instanceof RenderPass);
+	if (renderPass) {
+		renderPass.clear = false; // Needed for proper background
+	}
+
+	// Create grid pattern for keys
+	const keyTextureCanvas = document.createElement("canvas");
+	keyTextureCanvas.width = 256;
+	keyTextureCanvas.height = 256;
+	const ctx = keyTextureCanvas.getContext("2d");
+
+	// Fill with white background
+	ctx.fillStyle = "#ffffff";
+	ctx.fillRect(0, 0, 256, 256);
+
+	// Add subtle grid pattern
+	ctx.strokeStyle = "#f0f0f0";
+	ctx.lineWidth = 1;
+	const gridSize = 16;
+
+	ctx.beginPath();
+	for (let i = 0; i <= gridSize; i++) {
+		// Vertical lines
+		ctx.moveTo(i * (256 / gridSize), 0);
+		ctx.lineTo(i * (256 / gridSize), 256);
+		// Horizontal lines
+		ctx.moveTo(0, i * (256 / gridSize));
+		ctx.lineTo(256, i * (256 / gridSize));
+	}
+	ctx.stroke();
+
+	const keyTexture = new THREE.CanvasTexture(keyTextureCanvas);
+	keyTexture.wrapS = THREE.RepeatWrapping;
+	keyTexture.wrapT = THREE.RepeatWrapping;
+	keyTexture.repeat.set(2, 2);
+
+	// Apply subtle grid texture to keys
+	keyMaterial.map = keyTexture;
+
+	// Enhance lighting for better key definition
+	directionalLight.intensity = 1.8;
+	directionalLight.position.set(10, 15, 8);
+
+	// Add a subtle rim light for better key definition
+	const rimLight = new THREE.DirectionalLight(0xaaccff, 0.5);
+	rimLight.position.set(-5, 8, -10);
+	scene.add(rimLight);
+
+	// Update hand materials for minimal style
+	for (const fingerId in fingerMaterialMap) {
+		const material = fingerMaterialMap[fingerId];
+		if (material) {
+			material.color.set(0x333333); // Darker grey
+			material.roughness = 0.7; // More matte finish
+			material.metalness = 0.05; // Less metallic
+		}
+	}
+
+	// Update key press color for subtle feedback
+	KEY_PRESSED_COLOR = 0xeeeeee; // Slightly darker white
+	KEY_PRESSED_EMISSIVE = 0x666666; // Subtle grey glow
+	KEY_PRESSED_EMISSIVE_INTENSITY = 0.4; // Moderate glow
+
+	console.log("Enhanced visuals applied");
+}
+
+// Apply enhanced visuals
+enhanceVisuals();
+
+// Make keys all white with black text
+function updateKeyAppearance() {
+	// Update key label parameters
+	KEY_TEXT_COLOR = "#000000"; // Pure black text
+	KEY_LABEL_BACKGROUND_COLOR = "#ffffff"; // Pure white background for keys
+
+	// Update key materials
+	keyMaterial.color.set(0xffffff); // Pure white plastic
+	keyMaterial.roughness = 0.75; // More matte finish for plastic look
+	keyMaterial.metalness = 0.05; // Very low for plastic feel
+	keyMaterial.emissive.set(0x000000);
+	keyMaterial.emissiveIntensity = 0;
+
+	keyTopMaterial.color.set(0xffffff); // Pure white for top
+	keyTopMaterial.roughness = 0.7; // Slightly smoother top
+	keyTopMaterial.metalness = 0.05;
+	keyTopMaterial.emissive.set(0x000000);
+	keyTopMaterial.emissiveIntensity = 0;
+
+	// Update key press colors for white keys
+	KEY_PRESSED_COLOR = 0xf0f0f0; // Very slight darkening when pressed
+	KEY_PRESSED_EMISSIVE = 0x555555; // Subtle grey glow
+	KEY_PRESSED_EMISSIVE_INTENSITY = 0.3; // Moderate glow
+
+	// Handle existing keys - update their materials and textures
+	const keyboardGroup = scene.getObjectByName("keyboard");
+	if (keyboardGroup) {
+		keyboardGroup.traverse((child) => {
+			if (child.isMesh) {
+				// Update materials on all key meshes
+				if (Array.isArray(child.material)) {
+					child.material.forEach((mat) => {
+						if (mat.map) {
+							// This is likely a keytop with text - recreate its texture
+							// with the new color scheme
+							const originalTexture = mat.map;
+							const keyLabel = child.userData?.label || "";
+
+							if (keyLabel) {
+								// Recreate texture with new colors
+								const texWidth =
+									originalTexture.image?.width || KEY_TEXTURE_BASE_WIDTH_PX;
+								const texHeight =
+									originalTexture.image?.height || KEY_TEXTURE_BASE_DEPTH_PX;
+								const newTexture = createKeyTexture(
+									keyLabel,
+									texWidth,
+									texHeight
+								);
+
+								// Apply to material
+								mat.map = newTexture;
+								if (mat.emissiveMap) mat.emissiveMap = newTexture;
+
+								// Update colors
+								mat.color.set(0xffffff);
+								mat.emissive.set(0x000000);
+								mat.emissiveIntensity = 0;
+								mat.roughness = 0.6;
+								mat.metalness = 0.05;
+							}
+						} else {
+							// Non-textured part of the key
+							mat.color.set(0xffffff);
+							mat.emissive.set(0x000000);
+							mat.emissiveIntensity = 0;
+						}
+					});
+				} else if (child.material) {
+					// Single material
+					if (child.material.map) {
+						// This is likely a keytop with text
+						const keyLabel = child.userData?.label || "";
+						if (keyLabel) {
+							// Recreate texture with new colors
+							const texWidth =
+								child.material.map.image?.width || KEY_TEXTURE_BASE_WIDTH_PX;
+							const texHeight =
+								child.material.map.image?.height || KEY_TEXTURE_BASE_DEPTH_PX;
+							const newTexture = createKeyTexture(
+								keyLabel,
+								texWidth,
+								texHeight
+							);
+
+							// Apply to material
+							child.material.map = newTexture;
+							if (child.material.emissiveMap)
+								child.material.emissiveMap = newTexture;
+						}
+					}
+
+					// Update colors
+					child.material.color.set(0xffffff);
+					child.material.emissive.set(0x000000);
+					child.material.emissiveIntensity = 0;
+					child.material.roughness = 0.7;
+					child.material.metalness = 0.05;
+				}
+			}
+		});
+	}
+
+	console.log("Key appearance updated to white plastic with black text");
+}
+
+// Update key appearance after enhanced visuals
+updateKeyAppearance();
+
+// Function to reduce bloom effect and adjust lighting
+function reducedBloom() {
+	console.log("Reducing bloom effect and adjusting lighting");
+
+	// Reduce bloom effect significantly
+	if (bloomPass) {
+		bloomPass.strength = 0.12; // Much lower bloom strength
+		bloomPass.radius = 0.3;
+		bloomPass.threshold = 0.8; // Higher threshold means less area will bloom
+	}
+
+	// Adjust main directional light
+	if (directionalLight) {
+		directionalLight.intensity = 1.0; // Lower intensity
+		directionalLight.position.set(5, 10, 8);
+	}
+
+	// Adjust point lights
+	if (pointLight1) pointLight1.intensity = 0.3;
+	if (pointLight2) pointLight2.intensity = 0.3;
+
+	// Find and remove the rim light
+	const rimLights = scene.children.filter(
+		(child) =>
+			child instanceof THREE.DirectionalLight &&
+			child !== directionalLight &&
+			child.position.x < 0
+	);
+
+	rimLights.forEach((light) => {
+		scene.remove(light);
+	});
+
+	// Add a more subtle fill light instead
+	const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+	fillLight.position.set(-3, 5, 3);
+	scene.add(fillLight);
+
+	// Slightly reduce key brightness
+	keyMaterial.color.set(0xf0f0f0);
+	keyMaterial.emissiveIntensity = 0;
+
+	keyTopMaterial.color.set(0xf0f0f0);
+	keyTopMaterial.emissiveIntensity = 0;
+
+	console.log("Bloom and lighting adjusted");
+}
+
+// Apply reduced bloom settings
+reducedBloom();
+
+// NEW: Update pressed key appearance for better visual feedback
+KEY_PRESSED_COLOR = 0x00aadd; // Medium blue for pressed key
+KEY_PRESSED_EMISSIVE = 0x00ffff; // Cyan glow for pressed key
+KEY_PRESSED_EMISSIVE_INTENSITY = 0.8; // More visible glow intensity
+
+console.log("Set new pressed key appearance: Blue with Cyan Glow");

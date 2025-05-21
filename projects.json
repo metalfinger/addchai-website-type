@@ -1,0 +1,30 @@
+{
+  "projects": [
+    {
+      "id": "01",
+      "name": "qualqa",
+      "title": "Qualqa",
+      "shortHeading": "Launching an AI startup enabler in record time",
+      "type": "UX, Interaction Design and Development | Website",
+      "shortDescription": "Designed and developed a comprehensive digital platform for Qualqa, a startup focused on helping AI companies scale effectively.",
+      "situation": "Qualqa, a new startup dedicated to helping AI startups scale their operations, needed a professional web presence launched quickly to capitalize on market opportunities and establish credibility in the competitive AI service space.",
+      "task": "Create and deploy a fully functional, professionally designed website within a tight two-week timeframe that effectively communicates Qualqa's value proposition to potential AI startup clients.",
+      "action": "Conducted rapid discovery sessions to understand Qualqa's business model and target audience. Developed a streamlined design process with daily feedback loops. Built a responsive, modern website with clear service offerings and call-to-action elements. Implemented SEO best practices and analytics tracking. Created a lightweight CMS for the Qualqa team to update content independently.",
+      "result": "Successfully launched the Qualqa website in just 2 weeks, enabling them to immediately begin marketing efforts. The platform has helped them reach over 35 potential AI startup clients in the first month, with a 28% conversion rate on lead generation forms, establishing a strong digital foundation for their growing business.",
+      "url": "qualqa.com"
+    },
+    {
+      "id": "02",
+      "name": "iso-tank",
+      "title": "Deccan 3D Installation",
+      "shortHeading": "Immersive 3D visualization for industrial equipment",
+      "type": "Interactive Installation | 3D Visualization",
+      "shortDescription": "Created an interactive 3D installation that allows visitors to explore and understand ISO tanks through an immersive digital experience, making complex industrial equipment accessible and engaging.",
+      "situation": "Deccan needed a way to showcase their ISO tanks at industry exhibitions in a manner that would stand out and help potential clients visualize the product's features and benefits without having physical tanks present.",
+      "task": "Design and develop an interactive 3D installation that would allow exhibition visitors to explore ISO tanks virtually, understand their functionality, and visualize different configurations.",
+      "action": "Created detailed 3D models of various ISO tank configurations. Developed an intuitive touch-based interface for exploring the tanks. Implemented interactive hotspots highlighting key features and specifications. Optimized the installation to work offline at exhibition venues. Incorporated Deccan's branding throughout the experience.",
+      "result": "The installation was a major success at the exhibition, attracting approximately 1,500 visitors over two days. Post-event surveys showed 87% of visitors had an improved understanding of Deccan's ISO tanks, and the company reported a 43% increase in qualified leads compared to previous exhibitions. The installation has since become a standard part of Deccan's exhibition strategy.",
+      "url": "https://iso-tank.netlify.app/"
+    },
+    {
+      "i
