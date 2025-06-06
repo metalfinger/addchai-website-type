@@ -9,7 +9,7 @@ import {
 } from "./main.js";
 
 const customTextString =
-	"Like everybody, we make everything, technically if you pay anyone money they should be able to. Try us out if you're bored of the same dry content and want to cut the clutter, want to stand out from the rest, want to dissect your brand ethos and fill it with the blood of success and virality, want your sentences to all read the same as every other agency, and omg we're also doing it, stop writing this sentence right now! Phew. It's done. ";
+	"Typewriter ASMR for the analogue generation. Don’t worry there’s no AI over here, just you!";
 
 // --- Text Display ---
 const textContainer = document.getElementById("text-container");
