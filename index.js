@@ -9,7 +9,7 @@ import {
 } from "./main.js";
 
 const customTextString =
-	"Typewriter ASMR for the analogue generation. Don’t worry there’s no AI over here, just you!";
+	"Typewriter ASMR for the analogue generation. Don't worry there's no AI over here, just you!";
 
 // --- Text Display ---
 const textContainer = document.getElementById("text-container");
@@ -22,6 +22,9 @@ let actualDebugStatsElement = null;
 
 // Renamed variable for the main large centered text display
 let mainTypedTextDisplayElement = null;
+
+// NEW: Scroll instruction element
+let scrollInstructionElement = null;
 
 // This function now initializes the LARGE CENTERED TYPED TEXT DISPLAY
 // Renamed function
@@ -37,8 +40,36 @@ function initMainTypedTextDisplay() {
     .main-text-blinking-cursor {
       animation: mainTextCursorBlinkAnimation 1s step-end infinite;
     }
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+    .scroll-instruction {
+      animation: fadeInOut 2s ease-in-out infinite;
+      font-family: "Courier New", Courier, monospace;
+      color: rgb(0, 255, 136);
+      text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+    }
   `;
 	document.head.appendChild(styleSheet);
+
+	// Create scroll instruction element
+	scrollInstructionElement = document.createElement("div");
+	scrollInstructionElement.className = "scroll-instruction";
+	Object.assign(scrollInstructionElement.style, {
+		position: "fixed",
+		top: "3%",
+		left: "50%",
+		transform: "translate(-50%, 0)",
+		fontSize: "2em",
+		zIndex: "10000",
+		pointerEvents: "none", // Make sure it doesn't interfere with scrolling
+		backgroundColor: "rgba(0, 0, 0, 0.7)",
+		padding: "10px 20px",
+		borderRadius: "4px",
+	});
+	scrollInstructionElement.textContent = "Scroll";
+	document.body.appendChild(scrollInstructionElement);
 
 	mainTypedTextDisplayElement = document.createElement("div");
 	mainTypedTextDisplayElement.id = "main-typed-text-display";
@@ -145,6 +176,11 @@ let isCurrentlySimulatingChar = false;
 
 function handlePageScroll(event) {
 	event.preventDefault();
+
+	// Hide scroll instruction when scrolling starts
+	if (scrollInstructionElement) {
+		scrollInstructionElement.style.display = "none";
+	}
 
 	if (event.deltaY < 0) {
 		accumulatedScrollDelta = 0;
