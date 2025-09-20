@@ -68,7 +68,7 @@ function initMainTypedTextDisplay() {
 		padding: "10px 20px",
 		borderRadius: "4px",
 	});
-	scrollInstructionElement.textContent = "Scroll";
+	scrollInstructionElement.textContent = "Type";
 	document.body.appendChild(scrollInstructionElement);
 
 	mainTypedTextDisplayElement = document.createElement("div");
@@ -79,6 +79,9 @@ function initMainTypedTextDisplay() {
 		left: "10%", // Changed from 50% and removed transform
 		right: "10%",
 		// maxWidth: "80%",
+		maxHeight: "30vh",
+		overflowY: "auto",
+		overflowX: "hidden",
 		padding: "15px",
 		backgroundColor: "rgba(0, 0, 0, 0.7)",
 		color: "rgb(0, 255, 136)", // User specified format
@@ -89,6 +92,7 @@ function initMainTypedTextDisplay() {
 		zIndex: "9999",
 		whiteSpace: "pre-wrap",
 		textAlign: "center",
+		wordBreak: "break-word",
 		//set things in center
 	});
 	document.body.appendChild(mainTypedTextDisplayElement);
@@ -195,7 +199,7 @@ function handlePageScroll(event) {
 	}
 }
 
-window.addEventListener("wheel", handlePageScroll, { passive: false });
+// window.addEventListener("wheel", handlePageScroll, { passive: false }); // Disabled: switching back to direct typing mode
 
 function getDynamicTypingSpeed(scrollSpeed) {
 	const MIN_DURATION_CLAMP = 5; // Minimum 5ms for any duration //!Controller
@@ -291,6 +295,9 @@ function animationLoop() {
 	if (mainTypedTextDisplayElement) {
 		mainTypedTextDisplayElement.innerHTML =
 			displayedText + '<span class="main-text-blinking-cursor">|</span>';
+		// Auto-scroll to bottom when content grows
+		mainTypedTextDisplayElement.scrollTop =
+			mainTypedTextDisplayElement.scrollHeight;
 	}
 
 	// NEW: Update the actual debug stats display
@@ -325,3 +332,48 @@ window.simulateKeyRelease = simulateKeyRelease;
 window.resetAllFingers = resetAllFingers;
 
 console.log("index.js loaded, scroll-to-type with gentle inertia active.");
+
+// --- Direct typing mode: keyboard listeners ---
+function onKeyDown(event) {
+	if (event.repeat) return;
+
+	// Prevent unwanted browser actions for typing keys
+	if (
+		event.key === "Backspace" ||
+		event.key === "Enter" ||
+		event.code === "Space"
+	) {
+		event.preventDefault();
+	}
+
+	// Update displayed text
+	if (event.key && event.key.length === 1) {
+		displayedText += event.key;
+	} else if (event.key === "Backspace") {
+		displayedText = displayedText.slice(0, -1);
+	} else if (event.key === "Enter") {
+		displayedText += "\n";
+	} else if (event.code === "Space") {
+		displayedText += " ";
+	}
+
+	// Trigger hand/key animations
+	executeKeyDown(event.code, event.key);
+	if (event.code === "CapsLock") {
+		executeCapsLockSpecificKeyDown(event.code);
+	}
+}
+
+function onKeyUp(event) {
+	executeKeyUp(event.code);
+	if (event.code === "CapsLock") {
+		executeCapsLockSpecificKeyUp(event.code);
+	}
+}
+
+window.addEventListener("keydown", onKeyDown);
+window.addEventListener("keyup", onKeyUp);
+
+// Ensure audio resumes on first interaction
+window.addEventListener("click", resumeAudioContext);
+window.addEventListener("keydown", resumeAudioContext, true);

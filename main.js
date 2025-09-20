@@ -49,7 +49,7 @@ adjustCameraDistance(); // Call once initially to set the correct Z based on ini
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0xffffff); // Pure white background
+renderer.setClearColor(0x000000); // Dark background
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -276,6 +276,7 @@ const JOINT_RADIUS_FACTOR = 1.0; // Joint radius will match the end radius of th
 const FINGERTIP_RADIUS = 0.09;
 const PHALANX_LENGTH = 0.5;
 const METACARPAL_LENGTH = 0.8;
+const JOINT_GAP = 0.04; // Visible spacing between segments for puppeteer look
 const PALM_WIDTH = 1.5;
 const PALM_HEIGHT = 0.2;
 const PALM_DEPTH = 1.2;
@@ -362,32 +363,47 @@ const fingerProperties = {
 	},
 };
 
-// Modern hand materials
+// Puppeteer hand materials (wooden look)
+const woodTexture = createWoodGrainTexture(1024, 1024);
+woodTexture.repeat.set(2, 4);
 
-// Create the gradient map for toon shading hands
-const handToonGradientMap = createToonGradientMap([
-	"rgb(20, 40, 90)", // Darkest shade
-	"rgb(40, 70, 140)", // Mid-dark shade
-	"rgb(70, 100, 170)", // Mid-light shade
-	"rgb(120, 150, 200)", // Lightest shade
-]);
-
-const handBaseColor = 0x6699cc; // More saturated blue for better visibility
-
-const boneMaterial = new THREE.MeshToonMaterial({
-	color: handBaseColor,
-	gradientMap: handToonGradientMap,
-	transparent: false,
+const boneMaterial = new THREE.MeshPhysicalMaterial({
+	map: woodTexture,
+	color: 0xb08d6a, // oak-like tint
+	roughness: 0.6,
+	metalness: 0.0,
+	clearcoat: 0.25, // slight varnish
+	clearcoatRoughness: 0.4,
+	sheen: 0.3,
+	sheenColor: new THREE.Color(0xd8c2a8),
 });
-const jointMaterial = new THREE.MeshToonMaterial({
-	color: handBaseColor,
-	gradientMap: handToonGradientMap,
-	transparent: false,
+const jointMaterial = new THREE.MeshPhysicalMaterial({
+	map: woodTexture,
+	color: 0xa27f5e,
+	roughness: 0.65,
+	metalness: 0.0,
+	clearcoat: 0.2,
+	clearcoatRoughness: 0.5,
+	sheen: 0.25,
+	sheenColor: new THREE.Color(0xd8c2a8),
 });
-const fingertipMaterial = new THREE.MeshToonMaterial({
-	color: handBaseColor,
-	gradientMap: handToonGradientMap,
-	transparent: false,
+const fingertipMaterial = new THREE.MeshPhysicalMaterial({
+	map: woodTexture,
+	color: 0xb69472,
+	roughness: 0.55,
+	metalness: 0.0,
+	clearcoat: 0.3,
+	clearcoatRoughness: 0.35,
+	sheen: 0.35,
+	sheenColor: new THREE.Color(0xe8d7c3),
+});
+
+// Metallic hardware for joints (pins, washers)
+const jointHardwareMaterial = new THREE.MeshStandardMaterial({
+	color: 0xb0b7c3,
+	metalness: 1.0,
+	roughness: 0.25,
+	emissive: 0x000000,
 });
 const ikTargetMaterial = new THREE.MeshStandardMaterial({
 	color: 0x00ff88,
@@ -667,6 +683,63 @@ function createToonGradientMap(colors) {
 	return gradientMap;
 }
 
+// NEW: Procedural wood grain texture for puppeteer-style hands
+function createWoodGrainTexture(width = 512, height = 512) {
+	const canvas = document.createElement("canvas");
+	canvas.width = width;
+	canvas.height = height;
+	const ctx = canvas.getContext("2d");
+
+	// Base wood tone
+	ctx.fillStyle = "#b2896b"; // light oak-like base
+	ctx.fillRect(0, 0, width, height);
+
+	// Vertical grain lines
+	for (let x = 0; x < width; x++) {
+		const n = Math.sin((x / width) * Math.PI * 12 + Math.sin(x * 0.05) * 0.7);
+		const intensity = 12 + Math.floor(((n + 1) / 2) * 36); // 12..48
+		ctx.fillStyle = `rgba(90, 60, 40, ${0.06 + (intensity / 255) * 0.06})`;
+		const lineWidth = 1 + Math.floor(((n + 1) / 2) * 2); // 1..3 px
+		ctx.fillRect(x, 0, lineWidth, height);
+		x += lineWidth - 1;
+	}
+
+	// Subtle darker bands
+	for (let i = 0; i < 6; i++) {
+		const bandY = Math.floor(Math.random() * height);
+		const bandH = Math.floor(height * (0.03 + Math.random() * 0.05));
+		const grad = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
+		grad.addColorStop(0, "rgba(70, 45, 30, 0)");
+		grad.addColorStop(0.5, "rgba(70, 45, 30, 0.15)");
+		grad.addColorStop(1, "rgba(70, 45, 30, 0)");
+		ctx.fillStyle = grad;
+		ctx.fillRect(0, bandY, width, bandH);
+	}
+
+	// A few subtle "knots"
+	for (let k = 0; k < 3; k++) {
+		const cx = Math.floor(width * (0.2 + Math.random() * 0.6));
+		const cy = Math.floor(height * (0.2 + Math.random() * 0.6));
+		const r = Math.floor(
+			Math.min(width, height) * (0.05 + Math.random() * 0.07)
+		);
+		const radial = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r);
+		radial.addColorStop(0, "rgba(60, 40, 25, 0.25)");
+		radial.addColorStop(1, "rgba(60, 40, 25, 0)");
+		ctx.fillStyle = radial;
+		ctx.beginPath();
+		ctx.arc(cx, cy, r, 0, Math.PI * 2);
+		ctx.fill();
+	}
+
+	const texture = new THREE.CanvasTexture(canvas);
+	texture.wrapS = THREE.RepeatWrapping;
+	texture.wrapT = THREE.RepeatWrapping;
+	texture.anisotropy = 8;
+	texture.needsUpdate = true;
+	return texture;
+}
+
 const keyRowsLayout = []; // Stub to avoid error with old createKeyboard
 
 function createKey(keyInfo) {
@@ -755,6 +828,91 @@ function createKey(keyInfo) {
 const palmGeometry = new THREE.BoxGeometry(PALM_WIDTH, PALM_HEIGHT, PALM_DEPTH);
 const leftPalm = new THREE.Mesh(palmGeometry, boneMaterial);
 const rightPalm = new THREE.Mesh(palmGeometry.clone(), boneMaterial.clone());
+// Add subtle bevel edges by adding thin metallic corner caps to palms (visual cue)
+const palmCapMaterial = new THREE.MeshStandardMaterial({
+	color: 0x9aa3ad,
+	metalness: 0.9,
+	roughness: 0.35,
+});
+function addPalmHardware(palmMesh, isRight) {
+	const capGeo = new THREE.CylinderGeometry(0.03, 0.03, PALM_HEIGHT + 0.02, 8);
+	const offsets = [
+		new THREE.Vector3(
+			-PALM_WIDTH / 2 + 0.05,
+			PALM_HEIGHT / 2,
+			-PALM_DEPTH / 2 + 0.05
+		),
+		new THREE.Vector3(
+			PALM_WIDTH / 2 - 0.05,
+			PALM_HEIGHT / 2,
+			-PALM_DEPTH / 2 + 0.05
+		),
+		new THREE.Vector3(
+			-PALM_WIDTH / 2 + 0.05,
+			PALM_HEIGHT / 2,
+			PALM_DEPTH / 2 - 0.05
+		),
+		new THREE.Vector3(
+			PALM_WIDTH / 2 - 0.05,
+			PALM_HEIGHT / 2,
+			PALM_DEPTH / 2 - 0.05
+		),
+	];
+	offsets.forEach((p) => {
+		const cap = new THREE.Mesh(capGeo, palmCapMaterial);
+		cap.rotation.x = Math.PI / 2;
+		cap.position.copy(p);
+		cap.castShadow = true;
+		cap.receiveShadow = true;
+		palmMesh.add(cap);
+	});
+}
+addPalmHardware(leftPalm, false);
+addPalmHardware(rightPalm, true);
+
+// --- Puppeteer strings (two per palm) ---
+const stringMaterial = new THREE.LineBasicMaterial({ color: 0xdddddd });
+const puppetStringDefs = [];
+
+// Define static world anchors above the scene
+const leftStringAnchors = [
+	new THREE.Vector3(-1.2, 3.2, -0.3),
+	new THREE.Vector3(-0.8, 3.2, -0.3),
+];
+const rightStringAnchors = [
+	new THREE.Vector3(0.8, 3.2, -0.3),
+	new THREE.Vector3(1.2, 3.2, -0.3),
+];
+
+function createPuppetString(anchor, palmMesh, localAttach) {
+	const geom = new THREE.BufferGeometry();
+	const initialAttach = localAttach.clone().applyMatrix4(palmMesh.matrixWorld);
+	const positions = new Float32Array([
+		anchor.x,
+		anchor.y,
+		anchor.z,
+		initialAttach.x,
+		initialAttach.y,
+		initialAttach.z,
+	]);
+	geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+	const line = new THREE.Line(geom, stringMaterial);
+	line.frustumCulled = false;
+	scene.add(line);
+	puppetStringDefs.push({ geom, palmMesh, localAttach, anchor });
+}
+
+// Choose two attach points near the top of each palm (left/right edge)
+const leftPalmAttachLocal = [
+	new THREE.Vector3(-PALM_WIDTH / 3, PALM_HEIGHT / 2, -PALM_DEPTH / 2 + 0.02),
+	new THREE.Vector3(PALM_WIDTH / 3, PALM_HEIGHT / 2, -PALM_DEPTH / 2 + 0.02),
+];
+const rightPalmAttachLocal = [
+	new THREE.Vector3(-PALM_WIDTH / 3, PALM_HEIGHT / 2, -PALM_DEPTH / 2 + 0.02),
+	new THREE.Vector3(PALM_WIDTH / 3, PALM_HEIGHT / 2, -PALM_DEPTH / 2 + 0.02),
+];
+
+// Strings disabled
 
 // Create Hand Groups
 const leftHandGroup = new THREE.Group();
@@ -2322,6 +2480,8 @@ function animate() {
 		}
 	});
 
+	// Strings disabled
+
 	if (composer) {
 		composer.render(); // New rendering call with post-processing
 	} else {
@@ -2545,7 +2705,9 @@ function createFinger(fingerId) {
 			currentRadius * JOINT_RADIUS_FACTOR
 		);
 		nextJoint.position.y =
-			i === 0 ? actualMetacarpalLength : actualPhalanxLength;
+			i === 0
+				? actualMetacarpalLength + JOINT_GAP
+				: actualPhalanxLength + JOINT_GAP; // add visible joint gap
 		currentJoint.add(nextJoint);
 
 		// Calculate end radius with tapering for this phalanx
@@ -2560,6 +2722,26 @@ function createFinger(fingerId) {
 			phalanxBoneName
 		);
 		nextJoint.add(phalanxBone);
+
+		// Add metallic pin through the joint and thin washer collars (pin a bit larger than joint width)
+		const jointSphereRadius = currentRadius * JOINT_RADIUS_FACTOR;
+		const jointDiameter = jointSphereRadius * 2.0;
+		const pinLength = jointDiameter * 1.1; // 10% longer than joint diameter
+		const pinRadius = Math.max(0.02, jointSphereRadius * 0.55); // thick pin to visually exceed joint
+		const pinGeo = new THREE.CylinderGeometry(
+			pinRadius,
+			pinRadius,
+			pinLength,
+			12
+		);
+		const pinMesh = new THREE.Mesh(pinGeo, jointHardwareMaterial);
+		pinMesh.rotation.z = Math.PI / 2; // horizontal pin across X axis
+		pinMesh.position.set(0, 0, 0);
+		pinMesh.castShadow = true;
+		pinMesh.receiveShadow = true;
+		nextJoint.add(pinMesh);
+
+		// Washer rings removed per request; keeping only the cylinder pin
 
 		// Update current radius for next segment
 		currentRadius = phalanxEndRadius;
